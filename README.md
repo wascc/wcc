@@ -21,6 +21,19 @@ ARGS:
     <keytype>    The type of key pair to generate. May be Account, User, Module, Server, Operator, Cluster
 ```
 
+```
+USAGE:
+    wcc keys jwt <keytype>
+
+FLAGS:
+    -h, --help    Prints help information
+
+ARGS:
+    <keytype>    The type of jwt to generate. May be Account, Actor, or Operator.
+```
+
+Note: this combines the functionality of `nkeys` and `wascap` for generating keys & generating JWTs. Depending on the needs of the tool, these could potentially be combined to abstract the need for the user to manage the public key & seeds and instead just provide users with JWTs.
+
 ### sign
 Handles signing actor modules, previously handled by the `wascap` cli
 
