@@ -10,7 +10,7 @@ const ASCII: &str = "
    \\ \\____________\\ \\_______\\ \\_______\\
     \\|____________|\\|_______|\\|_______|
 
-waSCC CLI utilities
+A single CLI to handle all of your waSCC tooling needs
 ";
 
 #[derive(Debug, Clone, StructOpt)]
