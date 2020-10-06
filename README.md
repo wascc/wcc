@@ -8,11 +8,10 @@ wcc <subcommand> [args]
 
 ## Subcommands
 
-### keys
-Handles key generation and management, previously handled by the `nk` cli
+### claims
 ```
 USAGE:
-    wcc keys gen <keytype>
+    wcc claims gen <keytype>
 
 FLAGS:
     -h, --help    Prints help information
@@ -23,7 +22,7 @@ ARGS:
 
 ```
 USAGE:
-    wcc keys jwt <keytype>
+    wcc claims token <keytype>
 
 FLAGS:
     -h, --help    Prints help information
@@ -32,10 +31,21 @@ ARGS:
     <keytype>    The type of jwt to generate. May be Account, Actor, or Operator.
 ```
 
-Note: this combines the functionality of `nkeys` and `wascap` for generating keys & generating JWTs. Depending on the needs of the tool, these could potentially be combined to abstract the need for the user to manage the public key & seeds and instead just provide users with JWTs.
+```
+USAGE:
+    wcc claims inspect [FLAGS] <file>
+
+FLAGS:
+    -h, --help    Prints help information
+    -r, --raw     Extract the raw JWT from the file and print to stdout
+
+ARGS:
+    <file>    The WASM file to inspect
+```
+
+Depending on the needs of the tool, these could potentially be combined to abstract the need for the user to manage the public key & seeds and instead just provide users with JWTs.
 
 ### sign
-Handles signing actor modules, previously handled by the `wascap` cli
 
 ```
 USAGE:
@@ -72,22 +82,8 @@ ARGS:
     <output>    Target output file
 ```
 
-### caps
-Handles security inspection and verification of modules, previously handled by the `wascap` cli
-```
-USAGE:
-    wcc caps [FLAGS] <file>
-
-FLAGS:
-    -h, --help    Prints help information
-    -r, --raw     Extract the raw JWT from the file and print to stdout
-
-ARGS:
-    <file>    The file to read
-```
 
 ### lattice
-Handles interrogating the lattice, previously handled by the `latticectl` cli
 
 ```
 USAGE:
@@ -116,7 +112,6 @@ SUBCOMMANDS:
 each subcommand will have the appropriate help text from the `latticectl` client
 
 ### gantry
-Handles gantry operations, previously handled by the `gantry` cli
 ```
 USAGE:
     wcc gantry <SUBCOMMAND>
