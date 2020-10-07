@@ -42,12 +42,12 @@ OPTIONS:
     -c, --cap <capabilities>...         Add custom capabilities
     -x, --expires <expires-in-days>     Indicates the token expires in the given amount of days. If this option is left
                                         off, the token will never expire
-    -i, --issuer <issuer-key-path>      Issuer seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate an issuer key at `$HOME/.wcc/issuer.nk`, and if it is not found then an issuer key will be generated and placed in `$HOME/.wcc/issuer.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
+    -i, --issuer <issuer-key-path>      Issuer seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate an issuer key at `$HOME/.wcc/keys/issuer.nk`, and if it is not found then an issuer key will be generated and placed in `$HOME/.wcc/keys/issuer.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
     -n, --name <name>                   A human-readable, descriptive name for the token
     -b, --nbf <not-before-days>         Period in days that must elapse before this token is valid. If this option is
                                         left off, the token will be valid immediately
     -r, --rev <rev>                     Revision number
-    -u, --subject <subject-key-path>    Subject seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate a module key at `$HOME/.wcc/module.nk`, and if it is not found then a module key will be generated and placed in `$HOME/.wcc/module.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
+    -u, --subject <subject-key-path>    Subject seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate a module key at `$HOME/.wcc/keys/module.nk`, and if it is not found then a module key will be generated and placed in `$HOME/.wcc/keys/module.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
     -t, --tag <tags>...                 A list of arbitrary tags to be embedded in the token
     -v, --ver <ver>                     Human-readable version string
 
