@@ -12,17 +12,6 @@ wcc <subcommand> [args]
 
 ```
 USAGE:
-    wcc claims token <keytype>
-
-FLAGS:
-    -h, --help    Prints help information
-
-ARGS:
-    <tokentype>    The type of jwt to generate. May be Account, Actor, or Operator.
-```
-
-```
-USAGE:
     wcc claims inspect [FLAGS] <file>
 
 FLAGS:
@@ -31,6 +20,51 @@ FLAGS:
 
 ARGS:
     <file>    The WASM file to inspect
+```
+
+```
+USAGE:
+    wcc claims sign [FLAGS] [OPTIONS] <source> <output> --name <name>
+
+FLAGS:
+    -f, --blob_store     Enable access to the blob store capability
+    -e, --events         Enable access to an append-only event stream provider
+    -z, --extras         Enable access to the extras functionality (random nos, guids, etc)
+        --help           Prints help information
+    -h, --http_client    Enable the HTTP client standard capability
+    -s, --http_server    Enable the HTTP server standard capability
+    -k, --keyvalue       Enable the Key/Value Store standard capability
+    -l, --logging        Enable access to logging capability
+    -g, --msg            Enable the Message broker standard capability
+    -p, --prov           Indicates whether the signed module is a capability provider instead of an actor (the default is actor)
+
+OPTIONS:
+    -c, --cap <capabilities>...         Add custom capabilities
+    -x, --expires <expires-in-days>     Indicates the token expires in the given amount of days. If this option is left
+                                        off, the token will never expire
+    -i, --issuer <issuer-key-path>      Issuer seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate an issuer key at `$HOME/.wcc/issuer.nk`, and if it is not found then an issuer key will be generated and placed in `$HOME/.wcc/issuer.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
+    -n, --name <name>                   A human-readable, descriptive name for the token
+    -b, --nbf <not-before-days>         Period in days that must elapse before this token is valid. If this option is
+                                        left off, the token will be valid immediately
+    -r, --rev <rev>                     Revision number
+    -u, --subject <subject-key-path>    Subject seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate a module key at `$HOME/.wcc/module.nk`, and if it is not found then a module key will be generated and placed in `$HOME/.wcc/module.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
+    -t, --tag <tags>...                 A list of arbitrary tags to be embedded in the token
+    -v, --ver <ver>                     Human-readable version string
+
+ARGS:
+    <source>    File to read
+    <output>    Target output file. Defaults to `<source_file_location>/<source_file_name>_signed.wasm`
+```
+
+```
+USAGE:
+    wcc claims token <tokentype>
+
+FLAGS:
+    -h, --help    Prints help information
+
+ARGS:
+    <tokentype>    The type of jwt to generate. May be Account, Actor, or Operator.
 ```
 
 ### gantry
@@ -89,41 +123,4 @@ SUBCOMMANDS:
     start    Hold a lattice auction for a given actor and start it if a suitable host is found
     stop     Tell a given host to terminate the given actor
     watch    Watch events on the lattice
-```
-
-### sign
-
-```
-USAGE:
-    wcc sign [FLAGS] [OPTIONS] <source> <output> --issuer <issuer-key-path> --name <name> --subject <subject-key-path>
-
-FLAGS:
-    -f, --blob_store     Enable access to the blob store capability
-    -e, --events         Enable access to an append-only event stream provider
-    -z, --extras         Enable access to the extras functionality (random nos, guids, etc)
-        --help           Prints help information
-    -h, --http_client    Enable the HTTP client standard capability
-    -s, --http_server    Enable the HTTP server standard capability
-    -k, --keyvalue       Enable the Key/Value Store standard capability
-    -l, --logging        Enable access to logging capability
-    -g, --msg            Enable the Message broker standard capability
-    -p, --prov           Indicates whether the signed module is a capability provider instead of an actor (the default
-                         is actor)
-
-OPTIONS:
-    -c, --cap <capabilities>...         Add custom capabilities
-    -x, --expires <expires-in-days>     Indicates the token expires in the given amount of days. If this option is left
-                                        off, the token will never expire
-    -i, --issuer <issuer-key-path>      Issuer seed key path (usually a .nk file)
-    -n, --name <name>                   A human-readable, descriptive name for the token
-    -b, --nbf <not-before-days>         Period in days that must elapse before this token is valid. If this option is
-                                        left off, the token will be valid immediately
-    -r, --rev <rev>                     Revision number
-    -u, --subject <subject-key-path>    Subject seed key path (usually a .nk file)
-    -t, --tag <tags>...                 A list of arbitrary tags to be embedded in the token
-    -v, --ver <ver>                     Human-readable version string
-
-ARGS:
-    <source>    File to read
-    <output>    Target output file
 ```
