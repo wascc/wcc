@@ -9,16 +9,6 @@ wcc <subcommand> [args]
 ## Subcommands
 
 ### claims
-```
-USAGE:
-    wcc claims gen <keytype>
-
-FLAGS:
-    -h, --help    Prints help information
-
-ARGS:
-    <keytype>    The type of key pair to generate. May be Account, User, Module, Server, Operator, Cluster
-```
 
 ```
 USAGE:
@@ -28,7 +18,7 @@ FLAGS:
     -h, --help    Prints help information
 
 ARGS:
-    <keytype>    The type of jwt to generate. May be Account, Actor, or Operator.
+    <tokentype>    The type of jwt to generate. May be Account, Actor, or Operator.
 ```
 
 ```
@@ -43,7 +33,63 @@ ARGS:
     <file>    The WASM file to inspect
 ```
 
-Depending on the needs of the tool, these could potentially be combined to abstract the need for the user to manage the public key & seeds and instead just provide users with JWTs.
+### gantry
+
+```
+USAGE:
+    wcc gantry <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    download    Downloads an actor module from the registry
+    get         Query the Gantry registry
+    help        Prints this message or the help of the given subcommand(s)
+    put         Puts a token in the registry
+    upload      Uploads an actor module to the registry
+```
+
+### keys
+
+```
+USAGE:
+    wcc keys gen <keytype>
+
+FLAGS:
+    -h, --help    Prints help information
+
+ARGS:
+    <keytype>    The type of key pair to generate. May be Account, User, Module, Server, Operator, Cluster
+```
+
+### lattice
+
+```
+USAGE:
+    wcc lattice [FLAGS] [OPTIONS] <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -j, --json       Render the output in JSON (if the command supports it)
+    -V, --version    Prints version information
+
+OPTIONS:
+    -t, --timeout <call-timeout>    Lattice invocation / request timeout period, in milliseconds [env:
+                                    LATTICE_RPC_TIMEOUT_MILLIS]  [default: 600]
+    -c, --creds <creds>             Credentials file used to authenticate against NATS [env: LATTICE_CREDS_FILE]
+    -n, --namespace <namespace>     Lattice namespace [env: LATTICE_NAMESPACE]
+    -u, --url <url>                 The host IP of the nearest NATS server/leaf node to connect to the lattice [env:
+                                    LATTICE_HOST]  [default: 127.0.0.1]
+
+SUBCOMMANDS:
+    help     Prints this message or the help of the given subcommand(s)
+    list     List entities of various types within the lattice
+    start    Hold a lattice auction for a given actor and start it if a suitable host is found
+    stop     Tell a given host to terminate the given actor
+    watch    Watch events on the lattice
+```
 
 ### sign
 
@@ -81,51 +127,3 @@ ARGS:
     <source>    File to read
     <output>    Target output file
 ```
-
-
-### lattice
-
-```
-USAGE:
-    wcc lattice [FLAGS] [OPTIONS] <SUBCOMMAND>
-
-FLAGS:
-    -h, --help       Prints help information
-    -j, --json       Render the output in JSON (if the command supports it)
-    -V, --version    Prints version information
-
-OPTIONS:
-    -t, --timeout <call-timeout>    Lattice invocation / request timeout period, in milliseconds [env:
-                                    LATTICE_RPC_TIMEOUT_MILLIS]  [default: 600]
-    -c, --creds <creds>             Credentials file used to authenticate against NATS [env: LATTICE_CREDS_FILE]
-    -n, --namespace <namespace>     Lattice namespace [env: LATTICE_NAMESPACE]
-    -u, --url <url>                 The host IP of the nearest NATS server/leaf node to connect to the lattice [env:
-                                    LATTICE_HOST]  [default: 127.0.0.1]
-
-SUBCOMMANDS:
-    help     Prints this message or the help of the given subcommand(s)
-    list     List entities of various types within the lattice
-    start    Hold a lattice auction for a given actor and start it if a suitable host is found
-    stop     Tell a given host to terminate the given actor
-    watch    Watch events on the lattice
-```
-each subcommand will have the appropriate help text from the `latticectl` client
-
-### gantry
-```
-USAGE:
-    wcc gantry <SUBCOMMAND>
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-SUBCOMMANDS:
-    download    Downloads an actor module from the registry
-    get         Query the Gantry registry
-    help        Prints this message or the help of the given subcommand(s)
-    put         Puts a token in the registry
-    upload      Uploads an actor module to the registry
-```
-
-each subcommand will have the appropriate help text from the `gantry` client
