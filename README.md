@@ -1,9 +1,9 @@
-# wcc
-waSCC Controller - A single CLI to handle all of your waSCC tooling needs
+# wash
+waSCC Shell - A single CLI to handle all of your waSCC tooling needs
 
-## Using wcc
+## Using wash
 ```
-wcc <subcommand> [args]
+wash <subcommand> [args]
 ```
 
 ## Subcommands
@@ -12,7 +12,7 @@ wcc <subcommand> [args]
 
 ```
 USAGE:
-    wcc claims inspect [FLAGS] <file>
+    wash claims inspect [FLAGS] <file>
 
 FLAGS:
     -h, --help    Prints help information
@@ -24,7 +24,7 @@ ARGS:
 
 ```
 USAGE:
-    wcc claims sign [FLAGS] [OPTIONS] <source> <output> --name <name>
+    wash claims sign [FLAGS] [OPTIONS] <module> <output> --name <name>
 
 FLAGS:
     -f, --blob_store     Enable access to the blob store capability
@@ -42,23 +42,23 @@ OPTIONS:
     -c, --cap <capabilities>...         Add custom capabilities
     -x, --expires <expires-in-days>     Indicates the token expires in the given amount of days. If this option is left
                                         off, the token will never expire
-    -i, --issuer <issuer-key-path>      Issuer seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate an account key at `$HOME/.wcc/keys/<project_name>_account.nk`, and if it is not found then an issuer key will be generated and placed in `$HOME/.wcc/keys/<project_name>_account.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
+    -i, --issuer <issuer-key-path>      Issuer seed key path (usually a .nk file). If this option is left off, `wash` will attempt to locate an account key at `$HOME/.wash/keys/<module>_account.nk`, and if it is not found then an issuer key will be generated and placed in `$HOME/.wash/keys/<module>_account.nk`. You can also override this directory by setting the `WCC_HOME` environment variable.
     -n, --name <name>                   A human-readable, descriptive name for the token
     -b, --nbf <not-before-days>         Period in days that must elapse before this token is valid. If this option is
                                         left off, the token will be valid immediately
     -r, --rev <rev>                     Revision number
-    -u, --subject <subject-key-path>    Subject seed key path (usually a .nk file). If this option is left off, `wcc` will attempt to locate a module key at `$HOME/.wcc/keys/<project_name>_module.nk`, and if it is not found then a module key will be generated and placed in `$HOME/.wcc/keys/<project_name>_module.nk`. You can override this directory by setting the `WCC_HOME` environment variable.
+    -u, --subject <subject-key-path>    Subject seed key path (usually a .nk file). If this option is left off, `wash` will attempt to locate a module key at `$HOME/.wash/keys/<module>_module.nk`, and if it is not found then a module key will be generated and placed in `$HOME/.wash/keys/<module>_module.nk`. You can also override this directory by setting the `WCC_HOME` environment variable.
     -t, --tag <tags>...                 A list of arbitrary tags to be embedded in the token
     -v, --ver <ver>                     Human-readable version string
 
 ARGS:
-    <source>    File to read
-    <output>    Target output file. Defaults to `<source_file_location>/<source_file_name>_signed.wasm`
+    <module>    WASM to read
+    <output>    Target output file. Defaults to `<module_location>/<module>_signed.wasm`
 ```
 
 ```
 USAGE:
-    wcc claims token <tokentype>
+    wash claims token <tokentype>
 
 FLAGS:
     -h, --help    Prints help information
@@ -67,29 +67,11 @@ ARGS:
     <tokentype>    The type of jwt to generate. May be Account, Actor, or Operator.
 ```
 
-### gantry
-
-```
-USAGE:
-    wcc gantry <SUBCOMMAND>
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-SUBCOMMANDS:
-    download    Downloads an actor module from the registry
-    get         Query the Gantry registry
-    help        Prints this message or the help of the given subcommand(s)
-    put         Puts a token in the registry
-    upload      Uploads an actor module to the registry
-```
-
 ### keys
 
 ```
 USAGE:
-    wcc keys gen <keytype>
+    wash keys gen <keytype>
 
 FLAGS:
     -h, --help    Prints help information
@@ -100,13 +82,13 @@ ARGS:
 
 ```
 USAGE:
-    wcc keys get [OPTIONS] <keyname>
+    wash keys get [OPTIONS] <keyname>
 
 FLAGS:
     -h, --help      Prints help information
 
 OPTIONS:
-    -d, --directory <keysdirectory>     The directory where keys are stored for listing. Defaults to `$HOME/.wcc/keys`, and can be overwritten by setting the WCC_HOME environment variable.
+    -d, --directory <keysdirectory>     The directory where keys are stored for listing. Defaults to `$HOME/.wash/keys`, and can also be overwritten by setting the WCC_HOME environment variable.
 
 ARGS:
     <keyname>   The name of the key to output
@@ -114,20 +96,20 @@ ARGS:
 
 ```
 USAGE:
-    wcc keys list [OPTIONS]
+    wash keys list [OPTIONS]
 
 FLAGS:
     -h, --help          Prints help information
 
 OPTIONS:
-    -d, --directory <keysdirectory>     The directory where keys are stored for listing. Defaults to `$HOME/.wcc/keys`, and can be overwritten by setting the WCC_HOME environment variable.
+    -d, --directory <keysdirectory>     The directory where keys are stored for listing. Defaults to `$HOME/.wash/keys`, and can also be overwritten by setting the WCC_HOME environment variable.
 ```
 
 ### lattice
 
 ```
 USAGE:
-    wcc lattice [FLAGS] [OPTIONS] <SUBCOMMAND>
+    wash lattice [FLAGS] [OPTIONS] <SUBCOMMAND>
 
 FLAGS:
     -h, --help       Prints help information
@@ -148,4 +130,23 @@ SUBCOMMANDS:
     start    Hold a lattice auction for a given actor and start it if a suitable host is found
     stop     Tell a given host to terminate the given actor
     watch    Watch events on the lattice
+```
+
+### oci
+
+```
+USAGE:
+    wash oci <SUBCOMMAND> <artifact>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    help        Prints this message or the help of the given subcommand(s)
+    pull        Downloads a blob from an OCI compliant registry
+    push        Uploads a blob to an OCI compliant registry
+
+ARGS:
+    <artifact>       URI of the artifact
 ```
