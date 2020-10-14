@@ -132,11 +132,11 @@ SUBCOMMANDS:
     watch    Watch events on the lattice
 ```
 
-### oci
+### reg
 
 ```
 USAGE:
-    wash oci <SUBCOMMAND> <artifact>
+    wash reg <SUBCOMMAND> <artifact> [FLAGS]
 
 FLAGS:
     -h, --help       Prints help information
@@ -149,4 +149,18 @@ SUBCOMMANDS:
 
 ARGS:
     <artifact>       URI of the artifact
+```
+
+### up
+Starts an interactive REPL session for waSCC development
+```
+USAGE:
+    wash up [FLAGS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    help        Prints this message or the help of the given subcommand(s)
 ```

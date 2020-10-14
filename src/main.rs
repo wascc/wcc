@@ -27,9 +27,9 @@ enum CliCommand {
     /// keys
     #[structopt(name = "keys")]
     Keys(KeysCommand),
-    /// oci
-    #[structopt(name = "oci")]
-    OCI(OCICommand),
+    /// reg
+    #[structopt(name = "reg")]
+    Reg(RegCommand),
     /// lattice
     #[structopt(name = "lattice")]
     Lattice(LatticeCommand),
@@ -57,7 +57,7 @@ struct LatticeCommand {
 }
 
 #[derive(Debug, Clone, StructOpt)]
-struct OCICommand {
+struct RegCommand {
     /// Sample path
     #[structopt(short = "p", long = "path")]
     path: PathBuf,
