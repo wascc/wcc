@@ -37,8 +37,7 @@ use wascap::wasm::{days_from_now_to_jwt_time, sign_buffer_with_claims};
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(
     global_settings(&[AppSettings::ColoredHelp, AppSettings::VersionlessSubcommands]),
-    name = "claims",
-    about = "A command line utility for viewing, manipulating, and verifying capability claims in WebAssembly modules")]
+    name = "claims")]
 pub struct ClaimsCli {
     #[structopt(flatten)]
     command: ClaimsCliCommand,
@@ -166,9 +165,6 @@ struct ProviderMetadata {
     #[structopt(short = "s", long = "subject")]
     subject: String,
 
-    // The file hashes that correspond to the achitecture-OS target triples for this provider.
-    // TODO: Determine structopt responsibility
-    // target_hashes: HashMap<String, String>,
     /// Indicates the token expires in the given amount of days. If this option is left off, the token will never expire
     #[structopt(short = "x", long = "expires")]
     expires_in_days: Option<u64>,
@@ -355,7 +351,7 @@ fn generate_operator(operator: &OperatorMetadata) -> Result<(), Box<dyn ::std::e
 fn generate_account(account: &AccountMetadata) -> Result<(), Box<dyn ::std::error::Error>> {
     let keys = get_keypair_vec(&account.key_paths)?;
     if keys.len() < 2 {
-        return Err("must supply at least two keys - one for the issuer, one for subject, and an optional list of additional signers".into());
+        return Err("Must supply at least two keys - one for the issuer, one for subject, and an optional list of additional signers".into());
     }
 
     let claims: Claims<Account> = Claims::<Account>::with_dates(

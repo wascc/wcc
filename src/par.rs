@@ -1,13 +1,12 @@
 extern crate provider_archive;
 use crate::keys::extract_keypair;
 use nkeys::KeyPairType;
+use provider_archive::*;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 use structopt::clap::AppSettings;
 use structopt::StructOpt;
-
-use provider_archive::*;
 
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(
@@ -31,14 +30,6 @@ enum ParCliCommand {
     Insert(InsertCommand),
 }
 
-pub fn handle_command(cli: ParCli) -> Result<()> {
-    match cli.command {
-        ParCliCommand::Create(cmd) => handle_create(cmd),
-        ParCliCommand::Inspect(cmd) => handle_inspect(cmd),
-        ParCliCommand::Insert(cmd) => handle_insert(cmd),
-    }
-}
-
 #[derive(StructOpt, Debug, Clone)]
 struct CreateCommand {
     /// Capability contract ID (e.g. wascc:messaging or wascc:keyvalue).
@@ -57,7 +48,7 @@ struct CreateCommand {
     #[structopt(name = "version")]
     version: Option<String>,
 
-    /// Location of key files for signing. Defaults to $HOME/.wash/keys)
+    /// Location of key files for signing. Defaults to $WASH_KEYS ($HOME/.wash/keys)
     #[structopt(
         short = "d",
         long = "directory",
@@ -78,7 +69,7 @@ struct CreateCommand {
     #[structopt(short = "n", long = "name")]
     name: String,
 
-    /// Architecture of initial binary in format ARCH-OS (e.g. x86_64-linux)
+    /// Architecture of provider binary in format ARCH-OS (e.g. x86_64-linux)
     #[structopt(short = "a", long = "arch")]
     arch: String,
 
@@ -108,7 +99,7 @@ struct InsertCommand {
     #[structopt(short = "a", long = "arch")]
     arch: String,
 
-    /// Path to binary to insert
+    /// Path to provider binary to insert into archive
     #[structopt(short = "b", long = "binary")]
     binary: String,
 
@@ -128,6 +119,14 @@ struct InsertCommand {
     /// Path to subject seed key (service). If this flag is not provided, the will be sourced from $WASH_KEYS ($HOME/.wash/keys) or generated for you if it cannot be found.
     #[structopt(short = "s", long = "subject")]
     subject: Option<String>,
+}
+
+pub fn handle_command(cli: ParCli) -> Result<()> {
+    match cli.command {
+        ParCliCommand::Create(cmd) => handle_create(cmd),
+        ParCliCommand::Inspect(cmd) => handle_inspect(cmd),
+        ParCliCommand::Insert(cmd) => handle_insert(cmd),
+    }
 }
 
 /// Creates a provider archive using an initial architecture target, provider, and signing keys
@@ -189,15 +188,50 @@ fn handle_inspect(cmd: InspectCommand) -> Result<()> {
     let mut buf = Vec::new();
     let mut f = File::open(&cmd.archive)?;
     f.read_to_end(&mut buf)?;
+
     let archive = ProviderArchive::try_load(&buf)?;
-    let claims = archive.claims().unwrap();
-    println!("Name: {}", claims.metadata.clone().unwrap().name.unwrap());
-    println!(
-        "Capability contract ID: {}",
-        claims.metadata.clone().unwrap().capid
-    );
-    println!("Vendor: {}", claims.metadata.clone().unwrap().vendor);
-    println!("Supported targets: {:?}", archive.targets());
+    let claims = archive.claims().unwrap().metadata.unwrap();
+    // println!("Name: {}", claims.name.unwrap());
+    // println!("Capability contract ID: {}", claims.capid);
+    // println!("Vendor: {}", claims.vendor);
+    // println!("Supported targets: {:?}", archive.targets());
+
+    use term_table::row::Row;
+    use term_table::table_cell::*;
+    use term_table::{Table, TableStyle};
+
+    let mut table = Table::new();
+    table.max_column_width = 68;
+    table.style = TableStyle::extended();
+
+    table.add_row(Row::new(vec![TableCell::new_with_alignment(
+        format!("{} - Provider Archive", claims.name.unwrap()),
+        2,
+        Alignment::Center,
+    )]));
+
+    table.add_row(Row::new(vec![
+        TableCell::new("Capability Contract ID"),
+        TableCell::new_with_alignment(claims.capid, 1, Alignment::Right),
+    ]));
+    table.add_row(Row::new(vec![
+        TableCell::new("Vendor"),
+        TableCell::new_with_alignment(claims.vendor, 1, Alignment::Right),
+    ]));
+
+    table.add_row(Row::new(vec![TableCell::new_with_alignment(
+        "Supported Architecture Targets",
+        2,
+        Alignment::Center,
+    )]));
+
+    table.add_row(Row::new(vec![TableCell::new_with_alignment(
+        archive.targets().join("\n"),
+        2,
+        Alignment::Left,
+    )]));
+
+    println!("{}", table.render());
 
     Ok(())
 }

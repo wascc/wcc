@@ -66,7 +66,6 @@ FLAGS:
 SUBCOMMANDS:
     account     Generate a signed JWT for an account
     actor       Generate a signed JWT for an actor module
-    help        Prints this message or the help of the given subcommand(s)
     operator    Generate a signed JWT for an operator
 ```
 
@@ -128,7 +127,6 @@ OPTIONS:
                                     LATTICE_HOST]  [default: 127.0.0.1]
 
 SUBCOMMANDS:
-    help     Prints this message or the help of the given subcommand(s)
     list     List entities of various types within the lattice
     start    Hold a lattice auction for a given actor and start it if a suitable host is found
     stop     Tell a given host to terminate the given actor
@@ -146,8 +144,9 @@ FLAGS:
     -V, --version    Prints version information
 
 SUBCOMMANDS:
-    help        Prints this message or the help of the given subcommand(s)
-    build       Builds a provider archive file for a given capability provider
+    create      Build a provider archive file
+    insert      Insert a provider into a provider archive file
+    inspect     Inspect a provider archive file
 ```
 
 ### reg
@@ -161,7 +160,6 @@ FLAGS:
     -V, --version    Prints version information
 
 SUBCOMMANDS:
-    help        Prints this message or the help of the given subcommand(s)
     pull        Downloads a blob from an OCI compliant registry
     push        Uploads a blob to an OCI compliant registry
 
