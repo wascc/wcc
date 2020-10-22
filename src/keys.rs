@@ -242,7 +242,7 @@ fn keypair_type_to_string(keypair_type: KeyPairType) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate, get, list, Output};
+    use super::{generate, Output};
     use nkeys::KeyPairType;
     use serde::Deserialize;
 

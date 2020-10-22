@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use structopt::clap::AppSettings;
 use structopt::StructOpt;
 
+type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
+
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(
     global_settings(&[AppSettings::ColoredHelp, AppSettings::VersionlessSubcommands]),
@@ -156,7 +158,8 @@ fn handle_create(cmd: CreateCommand) -> Result<()> {
         KeyPairType::Service,
     )?;
 
-    par.add_library(&cmd.arch, &lib)?;
+    par.add_library(&cmd.arch, &lib)
+        .map_err(|e| format!("{}", e))?;
 
     let output = match cmd.output {
         Some(path) => path,
@@ -172,7 +175,9 @@ fn handle_create(cmd: CreateCommand) -> Result<()> {
     };
 
     match File::create(output.clone()) {
-        Ok(mut out) => par.write(&mut out, &issuer, &subject)?,
+        Ok(mut out) => par
+            .write(&mut out, &issuer, &subject)
+            .map_err(|e| format!("{}", e))?,
         Err(e) => println!(
             "Error: {}, please ensure directory {:?} exists",
             e,
@@ -189,12 +194,8 @@ fn handle_inspect(cmd: InspectCommand) -> Result<()> {
     let mut f = File::open(&cmd.archive)?;
     f.read_to_end(&mut buf)?;
 
-    let archive = ProviderArchive::try_load(&buf)?;
+    let archive = ProviderArchive::try_load(&buf).map_err(|e| format!("{}", e))?;
     let claims = archive.claims().unwrap().metadata.unwrap();
-    // println!("Name: {}", claims.name.unwrap());
-    // println!("Capability contract ID: {}", claims.capid);
-    // println!("Vendor: {}", claims.vendor);
-    // println!("Supported targets: {:?}", archive.targets());
 
     use term_table::row::Row;
     use term_table::table_cell::*;
@@ -242,7 +243,7 @@ fn handle_insert(cmd: InsertCommand) -> Result<()> {
     let mut f = File::open(cmd.archive.clone())?;
     f.read_to_end(&mut buf)?;
 
-    let mut par = ProviderArchive::try_load(&buf)?;
+    let mut par = ProviderArchive::try_load(&buf).map_err(|e| format!("{}", e))?;
 
     let issuer = extract_keypair(
         cmd.issuer,
@@ -261,10 +262,12 @@ fn handle_insert(cmd: InsertCommand) -> Result<()> {
     let mut lib = Vec::new();
     f.read_to_end(&mut lib)?;
 
-    par.add_library(&cmd.arch, &lib)?;
+    par.add_library(&cmd.arch, &lib)
+        .map_err(|e| format!("{}", e))?;
 
     let mut out = File::create(cmd.archive)?;
-    par.write(&mut out, &issuer, &subject)?;
+    par.write(&mut out, &issuer, &subject)
+        .map_err(|e| format!("{}", e))?;
 
     Ok(())
 }
