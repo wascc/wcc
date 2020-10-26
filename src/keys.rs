@@ -210,7 +210,7 @@ pub fn extract_keypair(
             // No default key, generating for user
             Err(_e) => {
                 let kp = KeyPair::new(keypair_type);
-                println!("No keypair found in {}, we will generate one for you and place it there. If you'd like to use your own keys, you can supply them as a flag.", path);
+                println!("No keypair found in {}, we will generate one for you and place it there. If you'd like to use alternative keys, you can supply them as a flag.", path);
                 let seed = kp.seed()?;
                 fs::create_dir_all(Path::new(&path).parent().unwrap())?;
                 let mut f = File::create(path)?;
