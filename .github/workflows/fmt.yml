@@ -19,7 +19,7 @@ jobs:
     - uses: actions-rs/cargo@v1
       with:
         command: fmt
-        args: --check
+        args: -- --check
     - name: rust-clippy-check
       uses: actions-rs/clippy-check@v1.0.7
 
