@@ -164,14 +164,14 @@ fn handle_create(cmd: CreateCommand) -> Result<()> {
         Some(cmd.binary.clone()),
         cmd.directory.clone(),
         KeyPairType::Account,
-        !cmd.disable_keygen,
+        cmd.disable_keygen,
     )?;
     let subject = extract_keypair(
         cmd.subject,
         Some(cmd.binary.clone()),
         cmd.directory,
         KeyPairType::Service,
-        !cmd.disable_keygen,
+        cmd.disable_keygen,
     )?;
 
     par.add_library(&cmd.arch, &lib)
@@ -267,14 +267,14 @@ fn handle_insert(cmd: InsertCommand) -> Result<()> {
         Some(cmd.binary.clone()),
         cmd.directory.clone(),
         KeyPairType::Account,
-        !cmd.disable_keygen,
+        cmd.disable_keygen,
     )?;
     let subject = extract_keypair(
         cmd.subject,
         Some(cmd.binary.clone()),
         cmd.directory,
         KeyPairType::Service,
-        !cmd.disable_keygen,
+        cmd.disable_keygen,
     )?;
 
     let mut f = File::open(cmd.binary.clone())?;
