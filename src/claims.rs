@@ -73,15 +73,14 @@ struct SignCommand {
     #[structopt(short = "o", long = "output")]
     output: Option<String>,
 
-    /// Location of key files for signing. Defaults to $WASH_KEYS ($HOME/.wash/keys)
-    #[structopt(
-        short = "d",
-        long = "directory",
-        env = "WASH_KEYS",
-        hide_env_values = true
-    )]
-    directory: Option<String>,
-
+    // /// Location of key files for signing. Defaults to $WASH_KEYS ($HOME/.wash/keys)
+    // #[structopt(
+    //     short = "d",
+    //     long = "directory",
+    //     env = "WASH_KEYS",
+    //     hide_env_values = true
+    // )]
+    // directory: Option<String>,
     /// Disables autogeneration of signing keys
     #[structopt(long = "disable-keygen")]
     disable_keygen: bool,
@@ -422,14 +421,14 @@ fn sign_file(cmd: &SignCommand) -> Result<(), Box<dyn ::std::error::Error>> {
     let issuer = extract_keypair(
         cmd.metadata.common.issuer.clone(),
         Some(cmd.source.clone()),
-        cmd.directory.clone(),
+        cmd.metadata.common.directory.clone(),
         KeyPairType::Account,
         cmd.disable_keygen,
     )?;
     let subject = extract_keypair(
         cmd.metadata.common.subject.clone(),
         Some(cmd.source.clone()),
-        cmd.directory.clone(),
+        cmd.metadata.common.directory.clone(),
         KeyPairType::Module,
         cmd.disable_keygen,
     )?;
