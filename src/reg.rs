@@ -31,6 +31,28 @@ enum SupportedArtifacts {
 pub struct RegCli {
     #[structopt(flatten)]
     command: RegCliCommand,
+
+    /// OCI username, if omitted anonymous authentication will be used
+    #[structopt(
+        short = "u",
+        long = "user",
+        env = "WASH_REG_USER",
+        hide_env_values = true
+    )]
+    user: Option<String>,
+
+    /// OCI password, if omitted anonymous authentication will be used
+    #[structopt(
+        short = "p",
+        long = "password",
+        env = "WASH_REG_PASSWORD",
+        hide_env_values = true
+    )]
+    password: Option<String>,
+
+    /// Allow insecure (HTTP) registry connections
+    #[structopt(long = "insecure")]
+    insecure: bool,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -49,24 +71,6 @@ struct PullCommand {
     #[structopt(name = "url")]
     url: String,
 
-    /// OCI username, if omitted anonymous authentication will be used
-    #[structopt(
-        short = "u",
-        long = "user",
-        env = "WASH_REG_USER",
-        hide_env_values = true
-    )]
-    user: Option<String>,
-
-    /// OCI password, if omitted anonymous authentication will be used
-    #[structopt(
-        short = "p",
-        long = "password",
-        env = "WASH_REG_PASSWORD",
-        hide_env_values = true
-    )]
-    password: Option<String>,
-
     /// Path to output
     #[structopt(short = "o", long = "output")]
     output: Option<String>,
@@ -74,10 +78,6 @@ struct PullCommand {
     /// Digest to verify artifact against
     #[structopt(short = "d", long = "digest")]
     digest: Option<String>,
-
-    /// Allow insecure (HTTP) registry connections
-    #[structopt(long = "insecure")]
-    insecure: bool,
 
     /// Allow latest artifact tags
     #[structopt(long = "allow-latest")]
@@ -94,31 +94,9 @@ struct PushCommand {
     #[structopt(name = "artifact")]
     artifact: String,
 
-    /// OCI username, if omitted anonymous authentication will be used
-    #[structopt(
-        short = "u",
-        long = "user",
-        env = "WASH_REG_USER",
-        hide_env_values = true
-    )]
-    user: Option<String>,
-
-    /// OCI password, if omitted anonymous authentication will be used
-    #[structopt(
-        short = "p",
-        long = "password",
-        env = "WASH_REG_PASSWORD",
-        hide_env_values = true
-    )]
-    password: Option<String>,
-
     /// Path to config file, if omitted will default to a blank configuration
     #[structopt(short = "c", long = "config")]
     config: Option<String>,
-
-    /// Allow insecure (HTTP) registry connections
-    #[structopt(long = "insecure")]
-    insecure: bool,
 
     /// Allow latest artifact tags
     #[structopt(long = "allow-latest")]
@@ -127,12 +105,17 @@ struct PushCommand {
 
 pub fn handle_command(cli: RegCli) -> Result<(), Box<dyn ::std::error::Error>> {
     match cli.command {
-        RegCliCommand::Pull(cmd) => handle_pull(cmd),
-        RegCliCommand::Push(cmd) => handle_push(cmd),
+        RegCliCommand::Pull(cmd) => handle_pull(cmd, cli.user, cli.password, cli.insecure),
+        RegCliCommand::Push(cmd) => handle_push(cmd, cli.user, cli.password, cli.insecure),
     }
 }
 
-fn handle_pull(cmd: PullCommand) -> Result<(), Box<dyn ::std::error::Error>> {
+fn handle_pull(
+    cmd: PullCommand,
+    user: Option<String>,
+    password: Option<String>,
+    insecure: bool,
+) -> Result<(), Box<dyn ::std::error::Error>> {
     let image: Reference = cmd.url.parse().unwrap();
 
     if image.tag().unwrap_or("latest") == "latest" && !cmd.allow_latest {
@@ -143,14 +126,14 @@ fn handle_pull(cmd: PullCommand) -> Result<(), Box<dyn ::std::error::Error>> {
     };
 
     let mut client = Client::new(ClientConfig {
-        protocol: if cmd.insecure {
+        protocol: if insecure {
             ClientProtocol::Http
         } else {
             ClientProtocol::Https
         },
     });
 
-    let auth = match (cmd.user, cmd.password) {
+    let auth = match (user, password) {
         (Some(user), Some(password)) => RegistryAuth::Basic(user, password),
         _ => RegistryAuth::Anonymous,
     };
@@ -261,7 +244,12 @@ fn validate_provider_archive(
     }
 }
 
-fn handle_push(cmd: PushCommand) -> Result<(), Box<dyn ::std::error::Error>> {
+fn handle_push(
+    cmd: PushCommand,
+    user: Option<String>,
+    password: Option<String>,
+    insecure: bool,
+) -> Result<(), Box<dyn ::std::error::Error>> {
     let image: Reference = cmd.url.parse().unwrap();
 
     if image.tag().unwrap() == "latest" && !cmd.allow_latest {
@@ -308,14 +296,14 @@ fn handle_push(cmd: PushCommand) -> Result<(), Box<dyn ::std::error::Error>> {
     };
 
     let mut client = Client::new(ClientConfig {
-        protocol: if cmd.insecure {
+        protocol: if insecure {
             ClientProtocol::Http
         } else {
             ClientProtocol::Https
         },
     });
 
-    let auth = match (cmd.user, cmd.password) {
+    let auth = match (user, password) {
         (Some(user), Some(password)) => RegistryAuth::Basic(user, password),
         _ => RegistryAuth::Anonymous,
     };
