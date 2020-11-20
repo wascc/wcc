@@ -9,6 +9,8 @@ mod keys;
 use keys::KeysCli;
 mod par;
 use par::ParCli;
+mod up;
+use up::UpCli;
 
 /// This renders appropriately with escape characters
 const ASCII: &str = "
@@ -44,17 +46,21 @@ enum CliCommand {
     /// Utilities for creating, inspecting, and modifying capability provider archive files
     #[structopt(name = "par")]
     Par(ParCli),
+    /// Utility to launch waSCC REPL environment
+    #[structopt(name = "up")]
+    Up(UpCli),
 }
 
 fn main() {
     let cli = Cli::from_args();
-    env_logger::init();
+    // env_logger::init();
 
     let res = match cli.command {
         CliCommand::Keys(keyscli) => keys::handle_command(keyscli),
         CliCommand::Lattice(latticecli) => lattice::handle_command(latticecli),
         CliCommand::Claims(claimscli) => claims::handle_command(claimscli),
         CliCommand::Par(parcli) => par::handle_command(parcli),
+        CliCommand::Up(upcli) => up::handle_command(upcli),
     };
 
     match res {
