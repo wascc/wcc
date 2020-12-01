@@ -18,6 +18,9 @@ use tui_logger::*;
 
 type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
+const WASH_LOG_INFO: &str = "WASH_LOG";
+const WASH_CMD_INFO: &str = "WASH_CMD";
+
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(
     global_settings(&[AppSettings::ColoredHelp, AppSettings::VersionlessSubcommands]),
@@ -161,14 +164,26 @@ fn handle_key(state: &mut InputState, code: KeyCode, _modifiers: KeyModifiers) -
             state.input_cursor = 0;
 
             match cli {
-                Ok(ReplCli {
-                    cmd: ReplCliCommand::Exit,
-                }) => {
-                    println!("Have a good day!");
-                    return Err("REPL Exited".into());
+                Ok(ReplCli { cmd }) => {
+                    use ReplCliCommand::*;
+                    match cmd {
+                        Exit => {
+                            info!(target: WASH_CMD_INFO, "Goodbye");
+                            return Err("REPL Exited".into());
+                        }
+                        Start(startcmd) => info!(
+                            target: WASH_CMD_INFO,
+                            "Parsed start command: {:?}", startcmd
+                        ),
+                        Link(linkcmd) => {
+                            info!(target: WASH_CMD_INFO, "Parsed link command: {:?}", linkcmd)
+                        }
+                        Call(callcmd) => {
+                            info!(target: WASH_CMD_INFO, "Parsed call command: {:?}", callcmd)
+                        }
+                    }
                 }
-                Err(e) => info!(target: "info", "{}", e.message),
-                _ => info!(target:"info", "command parsed without error"),
+                Err(e) => error!(target: WASH_CMD_INFO, "{}", e.message),
             };
         }
         _ => (),
@@ -197,9 +212,34 @@ fn handle_up() -> Result<()> {
     let mut state = InputState::default();
     let tui_state = TuiWidgetState::new();
     let dispatcher = Rc::new(RefCell::new(Dispatcher::<Event>::new()));
-    info!(target:"WASH_REPL_INFO", "Welcome to the WASH REPL! Your commands are being executed whenever you hit Return");
-    info!(target:"WASH_REPL_INFO", "To see a list of commands, type 'help'. To exit, type 'exit'");
-    info!(target:"WASH_REPL_INFO", "Press 'tab' to toggle between entering commands and changing log level");
+    info!(
+        target: WASH_LOG_INFO,
+        "=================================================================================="
+    );
+    info!(
+        target: WASH_LOG_INFO,
+        "Welcome to the WASH REPL! Your commands are being executed whenever you hit Return"
+    );
+    info!(
+        target: WASH_LOG_INFO,
+        "To see a list of commands, type 'help'. To exit, type 'exit'"
+    );
+    info!(
+        target: WASH_LOG_INFO,
+        "Press 'tab' to toggle between entering commands and changing log level"
+    );
+    info!(
+        target: WASH_LOG_INFO,
+        "The target selector supports arrow keys to navigate and alter log level"
+    );
+    info!(
+        target: WASH_LOG_INFO,
+        "as well as 'h' to hide the log selector"
+    );
+    info!(
+        target: WASH_LOG_INFO,
+        "=================================================================================="
+    );
     draw_ui(&state, &mut terminal, &tui_state, &dispatcher)?;
 
     let mut repl_focus = true;
@@ -311,6 +351,8 @@ fn draw_selector_panel(
         .style_info(Style::default().fg(Color::Cyan))
         .state(state)
         .dispatcher(dispatcher.clone());
+    // The tui_logger dispatcher on trace mode is extremely noisy (4 logs per keystroke)
+    set_level_for_target("tui_logger::dispatcher", LevelFilter::Debug);
 
     frame.render_widget(selector_panel, chunk);
 }
