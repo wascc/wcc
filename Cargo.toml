@@ -24,12 +24,16 @@ tui = { version = "0.12.0", default-features = false, features = ["crossterm"] }
 log = "0.4.11"
 crossterm = "0.18.2"
 unicode-width = "0.1.8"
+tokio = { version = "0.2.0" }
+nats = "0.8.5"
 
 nkeys = "0.0.11"
 latticeclient = "0.4.0"
 wascap = "0.5.1"
 term-table = "1.3.0"
 provider-archive = "0.3.0"
+wascc-host = { git = "https://github.com/wascc/wasccd", branch = "main"}
+once_cell = "1.5.2"
 
 [[bin]]
 name = "wash"

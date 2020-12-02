@@ -6,6 +6,7 @@ use log::{debug, error, info, trace, warn, LevelFilter};
 use std::io::{self, Stdout};
 use std::{cell::RefCell, io::Write, rc::Rc};
 use structopt::{clap::AppSettings, StructOpt};
+use tokio::runtime::*;
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -15,6 +16,8 @@ use tui::{
     Frame, Terminal,
 };
 use tui_logger::*;
+
+use wascc_host::{Host, HostBuilder};
 
 type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
@@ -31,22 +34,41 @@ pub struct UpCli {
 }
 
 #[derive(StructOpt, Debug, Clone)]
-struct UpCommand {}
+struct UpCommand {
+    /// Host for lattice connections, defaults to 0.0.0.0
+    #[structopt(
+        short = "h",
+        long = "host",
+        default_value = "0.0.0.0",
+        env = "WASH_RPC_HOST"
+    )]
+    rpc_host: String,
+
+    /// Port for lattice connections, defaults to 4222
+    #[structopt(
+        short = "p",
+        long = "port",
+        default_value = "4222",
+        env = "WASH_RPC_PORT"
+    )]
+    rpc_port: String,
+}
 
 pub fn handle_command(cli: UpCli) -> Result<()> {
     match cli.command {
-        UpCommand { .. } => handle_up(),
+        UpCommand { .. } => handle_up(cli.command),
     }
 }
 
 #[derive(StructOpt, Debug, Clone)]
-#[structopt(global_settings(&[AppSettings::NoBinaryName]))]
+#[structopt(name = "wash>", global_settings(&[AppSettings::NoBinaryName, AppSettings::DisableVersion, AppSettings::ColorNever]))]
 struct ReplCli {
     #[structopt(flatten)]
     cmd: ReplCliCommand,
 }
 
 #[derive(StructOpt, Debug, Clone)]
+#[structopt(global_settings(&[AppSettings::ColorNever, AppSettings::DisableVersion, AppSettings::VersionlessSubcommands]))]
 enum ReplCliCommand {
     /// Links an actor and a capability provider
     #[structopt(name = "link")]
@@ -60,9 +82,9 @@ enum ReplCliCommand {
     #[structopt(name = "start")]
     Start(StartCommand),
 
-    /// Terminates the REPL environment
-    #[structopt(name = "exit")]
-    Exit,
+    /// Terminates the REPL environment (also accepts 'exit', 'logout', 'q' and ':q!')
+    #[structopt(name = "quit", aliases = &["exit", "logout", "q", ":q!"])]
+    Quit,
 }
 
 #[derive(StructOpt, Debug, Clone)]
@@ -167,9 +189,9 @@ fn handle_key(state: &mut InputState, code: KeyCode, _modifiers: KeyModifiers) -
                 Ok(ReplCli { cmd }) => {
                     use ReplCliCommand::*;
                     match cmd {
-                        Exit => {
+                        Quit => {
                             info!(target: WASH_CMD_INFO, "Goodbye");
-                            return Err("REPL Exited".into());
+                            return Err("Quitting REPL".into());
                         }
                         Start(startcmd) => info!(
                             target: WASH_CMD_INFO,
@@ -183,7 +205,14 @@ fn handle_key(state: &mut InputState, code: KeyCode, _modifiers: KeyModifiers) -
                         }
                     }
                 }
-                Err(e) => error!(target: WASH_CMD_INFO, "{}", e.message),
+                Err(e) => {
+                    use structopt::clap::ErrorKind::*;
+                    // HelpDisplayed is the StructOpt help text error, which should be displayed as info
+                    match e.kind {
+                        HelpDisplayed => info!(target: WASH_CMD_INFO, "\n{}", e.message),
+                        _ => error!(target: WASH_CMD_INFO, "\n{}", e.message),
+                    }
+                }
             };
         }
         _ => (),
@@ -192,7 +221,7 @@ fn handle_key(state: &mut InputState, code: KeyCode, _modifiers: KeyModifiers) -
 }
 
 /// Launches REPL environment
-fn handle_up() -> Result<()> {
+fn handle_up(cmd: UpCommand) -> Result<()> {
     // Initialize logger at default level Trace
     init_logger(LevelFilter::Trace).unwrap();
     set_default_level(LevelFilter::Trace);
@@ -222,7 +251,7 @@ fn handle_up() -> Result<()> {
     );
     info!(
         target: WASH_LOG_INFO,
-        "To see a list of commands, type 'help'. To exit, type 'exit'"
+        "To see a list of commands, type 'help'. To exit the REPL, you can type 'quit'"
     );
     info!(
         target: WASH_LOG_INFO,
@@ -241,6 +270,9 @@ fn handle_up() -> Result<()> {
         "=================================================================================="
     );
     draw_ui(&state, &mut terminal, &tui_state, &dispatcher)?;
+
+    // let mut rt = Runtime::new()?;
+    // let host = rt.block_on(launch_host(cmd.rpc_host, cmd.rpc_port))?;
 
     let mut repl_focus = true;
     loop {
@@ -274,6 +306,17 @@ fn handle_up() -> Result<()> {
         }
     }
     Ok(())
+}
+
+async fn launch_host(rpc_host: String, rpc_port: String) -> Result<Host> {
+    let nc = nats::asynk::connect(&format!("{}:{}", rpc_host, rpc_port)).await?;
+    let host = HostBuilder::new()
+        .with_rpc_client(nc)
+        .with_namespace("wasccrepl")
+        .build();
+    host.start().await.unwrap();
+
+    Ok(host)
 }
 
 fn draw_ui(
@@ -315,7 +358,7 @@ fn draw_input_panel(frame: &mut Frame<CrosstermBackend<Stdout>>, state: &InputSt
     // Draw REPL panel
     let input_panel = Paragraph::new(display)
         .block(Block::default().borders(Borders::ALL).title(Span::styled(
-            "REPL",
+            " REPL ",
             Style::default().add_modifier(Modifier::BOLD),
         )))
         .style(Style::default().fg(Color::White))
