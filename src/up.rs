@@ -17,7 +17,7 @@ use tui::{
 };
 use tui_logger::*;
 
-use wascc_host::{Host, HostBuilder};
+use wasmcloud_host::{Host, HostBuilder};
 
 type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
