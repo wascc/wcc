@@ -27,7 +27,7 @@ latticeclient = "0.4.0"
 wascap = "0.5.1"
 term-table = "1.3.0"
 provider-archive = "0.3.0"
-oci-distribution = { path = "../krustlet/crates/oci-distribution" }
+oci-distribution = { git = "https://github.com/brooksmtownsend/krustlet", branch = "oci-push" }
 
 [[bin]]
 name = "wash"
