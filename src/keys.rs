@@ -189,12 +189,16 @@ pub fn extract_keypair(
     } else if let Some(module) = module_path {
         // No seed value provided, attempting to source from provided or default directory
         let dir = determine_directory(directory);
-        let module_name = PathBuf::from(module)
-            .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
+        // Account key should be re-used, and will attempt to generate based on the terminal USER
+        let module_name = match keypair_type {
+            KeyPairType::Account => std::env::var("USER").unwrap_or("user".to_string()),
+            _ => PathBuf::from(module)
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string(),
+        };
         let path = format!(
             "{}/{}_{}.nk",
             dir,
