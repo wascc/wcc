@@ -29,7 +29,7 @@ wascap = "0.5.1"
 term-table = "1.3.0"
 provider-archive = "0.3.0"
 oci-distribution = { git = "https://github.com/brooksmtownsend/krustlet", branch = "oci-push" }
-control-interface = { git = "https://github.com/wascc/wasmCloud", branch = "main"}
+control-interface = { git = "https://github.com/wasmcloud/wasmcloud", branch = "main"}
 
 [[bin]]
 name = "wash"
