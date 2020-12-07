@@ -1,5 +1,7 @@
 extern crate control_interface;
 use control_interface::*;
+use log::info;
+use std::collections::HashMap;
 use std::time::Duration;
 use structopt::StructOpt;
 use term_table::row::Row;
@@ -29,12 +31,12 @@ pub struct ConnectionOpts {
     rpc_port: String,
 
     /// Namespace prefix for wasmCloud command interface
-    #[structopt(short = "n", long = "ns-prefix")]
-    ns_prefix: Option<String>,
+    #[structopt(short = "n", long = "ns-prefix", default_value = "default")]
+    ns_prefix: String,
 
-    /// Timeout length for RPC, defaults to 1 second
-    #[structopt(short = "t", long = "timeout", default_value = "1")]
-    timeout: u64,
+    /// Timeout length for RPC, defaults to 2 seconds
+    #[structopt(short = "t", long = "rpc_timeout", default_value = "2")]
+    rpc_timeout: u64,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -58,11 +60,11 @@ pub enum GetCommand {
     #[structopt(name = "hosts")]
     Hosts(GetHostsCommand),
 
-    /// Query lattice for the inventory of a host
+    /// Query a single host for its inventory of labels, actors and providers
     #[structopt(name = "inventory")]
     HostInventory(GetHostInventoryCommand),
 
-    /// Query lattice for claims present in the lattice
+    /// Query lattice for its claims cache
     #[structopt(name = "claims")]
     Claims(GetClaimsCommand),
 }
@@ -71,7 +73,7 @@ pub enum GetCommand {
 pub enum StartCommand {
     /// Launch an actor in a host
     #[structopt(name = "actor")]
-    Actor(ActorCommand),
+    Actor(StartActorCommand),
 
     /// Launch a provider in a host
     #[structopt(name = "provider")]
@@ -82,7 +84,7 @@ pub enum StartCommand {
 pub enum StopCommand {
     /// Stop an actor running in a host
     #[structopt(name = "actor")]
-    Actor(ActorCommand),
+    Actor(StopActorCommand),
 
     /// Stop a provider running in a host
     #[structopt(name = "provider")]
@@ -93,6 +95,9 @@ pub enum StopCommand {
 pub struct GetHostsCommand {
     #[structopt(flatten)]
     opts: ConnectionOpts,
+
+    #[structopt(short = "o", long = "timeout", default_value = "2")]
+    timeout: u64,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -106,7 +111,53 @@ pub struct GetHostInventoryCommand {
 }
 
 #[derive(Debug, Clone, StructOpt)]
-pub struct ActorCommand {
+pub struct StartActorCommand {
+    #[structopt(flatten)]
+    opts: ConnectionOpts,
+
+    /// Id of host, if omitted the actor will be auctioned in the lattice to find a suitable host
+    #[structopt(short = "h", long = "host-id", name = "host-id")]
+    host_id: Option<String>,
+
+    /// Actor reference, e.g. the OCI URL for the actor
+    #[structopt(name = "actor-ref")]
+    actor_ref: String,
+
+    /// Constraints for actor auction in the form of "label=value". If host-id is supplied, this list is ignored
+    #[structopt(short = "c", long = "constraint", name = "constraints")]
+    constraints: Option<Vec<String>>,
+
+    #[structopt(short = "o", long = "timeout", default_value = "2")]
+    timeout: u64,
+}
+
+#[derive(Debug, Clone, StructOpt)]
+pub struct StartProviderCommand {
+    #[structopt(flatten)]
+    opts: ConnectionOpts,
+
+    /// Id of host, if omitted the provider will be auctioned in the lattice to find a suitable host
+    #[structopt(short = "h", long = "host-id", name = "host-id")]
+    host_id: Option<String>,
+
+    /// Provider reference, e.g. the OCI URL for the provider
+    #[structopt(name = "provider-ref")]
+    provider_ref: String,
+
+    /// Link name of provider
+    #[structopt(short = "l", long = "link-name")]
+    link_name: Option<String>,
+
+    /// Constraints for provider auction in the form of "label=value". If host-id is supplied, this list is ignored
+    #[structopt(short = "c", long = "constraint", name = "constraints")]
+    constraints: Option<Vec<String>>,
+
+    #[structopt(short = "o", long = "timeout", default_value = "2")]
+    timeout: u64,
+}
+
+#[derive(Debug, Clone, StructOpt)]
+pub struct StopActorCommand {
     #[structopt(flatten)]
     opts: ConnectionOpts,
 
@@ -117,24 +168,6 @@ pub struct ActorCommand {
     /// Actor reference, e.g. the OCI URL for the actor
     #[structopt(name = "actor-ref")]
     actor_ref: String,
-}
-
-#[derive(Debug, Clone, StructOpt)]
-pub struct StartProviderCommand {
-    #[structopt(flatten)]
-    opts: ConnectionOpts,
-
-    /// Id of host
-    #[structopt(name = "host-id")]
-    host_id: String,
-
-    /// Provider reference, e.g. the OCI URL for the provider
-    #[structopt(name = "provider-ref")]
-    provider_ref: String,
-
-    /// Link name of provider
-    #[structopt(short = "l", long = "link-name")]
-    link_name: Option<String>,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -185,7 +218,8 @@ pub fn handle_command(cli: CtlCli) -> Result<()> {
             display_claims(claims, ns);
         }
         Start(StartCommand::Actor(cmd)) => {
-            rt.block_on(start_actor(cmd))?;
+            let ack = rt.block_on(start_actor(cmd))?;
+            info!(target: "command_interface", "{:?}", ack);
         }
         Start(StartCommand::Provider(cmd)) => {
             rt.block_on(start_provider(cmd))?;
@@ -203,11 +237,11 @@ pub fn handle_command(cli: CtlCli) -> Result<()> {
 pub async fn new_ctl_client(
     host: &str,
     port: &str,
-    ns_prefix: Option<String>,
+    ns_prefix: String,
     timeout: Duration,
 ) -> Result<Client> {
     let nc = nats::asynk::connect(&format!("{}:{}", host, port)).await?;
-    Ok(Client::new(nc, ns_prefix, timeout))
+    Ok(Client::new(nc, Some(ns_prefix), timeout))
 }
 
 async fn client_from_opts(opts: ConnectionOpts) -> Result<Client> {
@@ -215,13 +249,13 @@ async fn client_from_opts(opts: ConnectionOpts) -> Result<Client> {
         &opts.rpc_host,
         &opts.rpc_port,
         opts.ns_prefix,
-        Duration::from_secs(opts.timeout),
+        Duration::from_secs(opts.rpc_timeout),
     )
     .await
 }
 
 pub async fn get_hosts(cmd: GetHostsCommand) -> Result<Vec<Host>> {
-    let timeout = Duration::from_secs(cmd.opts.timeout);
+    let timeout = Duration::from_secs(cmd.timeout);
     let client = client_from_opts(cmd.opts).await?;
     client.get_hosts(timeout).await.map_err(convert_error)
 }
@@ -239,18 +273,69 @@ pub async fn get_claims(cmd: GetClaimsCommand) -> Result<ClaimsList> {
     client.get_claims().await.map_err(convert_error)
 }
 
-pub async fn start_actor(cmd: ActorCommand) -> Result<StartActorAck> {
-    let client = client_from_opts(cmd.opts).await?;
+pub async fn start_actor(cmd: StartActorCommand) -> Result<StartActorAck> {
+    let client = client_from_opts(cmd.opts.clone()).await?;
+
+    let host = match cmd.host_id {
+        Some(host) => host,
+        None => {
+            let suitable_hosts = client
+                .perform_actor_auction(
+                    &cmd.actor_ref,
+                    constraints_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
+                    Duration::from_secs(cmd.timeout),
+                )
+                .await
+                .map_err(convert_error)?;
+            if suitable_hosts.is_empty() {
+                return Err(format!("No suitable hosts found for actor {}", cmd.actor_ref).into());
+            } else {
+                suitable_hosts[0].host_id.to_string()
+            }
+        }
+    };
+
     client
-        .start_actor(&cmd.host_id, &cmd.actor_ref)
+        .start_actor(&host, &cmd.actor_ref)
         .await
         .map_err(convert_error)
 }
 
 pub async fn start_provider(cmd: StartProviderCommand) -> Result<StartProviderAck> {
-    let client = client_from_opts(cmd.opts).await?;
+    let client = client_from_opts(cmd.opts.clone()).await?;
+
+    let host = match cmd.host_id {
+        Some(host) => host,
+        None => {
+            if let Some(link_name) = cmd.link_name.clone() {
+                let suitable_hosts = client
+                    .perform_provider_auction(
+                        &cmd.provider_ref,
+                        &link_name,
+                        constraints_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
+                        Duration::from_secs(cmd.timeout),
+                    )
+                    .await
+                    .map_err(convert_error)?;
+                if suitable_hosts.is_empty() {
+                    return Err(format!(
+                        "No suitable hosts found for provider {}",
+                        cmd.provider_ref
+                    )
+                    .into());
+                } else {
+                    suitable_hosts[0].host_id.to_string()
+                }
+            } else {
+                return Err(
+                    "Link name is required if host id is omitted for start provider".into(),
+                );
+            }
+        }
+    };
+
     client
-        .start_provider(&cmd.host_id, &cmd.provider_ref, cmd.link_name)
+        .start_provider(&host, &cmd.provider_ref, cmd.link_name)
         .await
         .map_err(convert_error)
 }
@@ -268,7 +353,7 @@ pub async fn stop_provider(cmd: StopProviderCommand) -> Result<StopProviderAck> 
         .map_err(convert_error)
 }
 
-pub async fn stop_actor(cmd: ActorCommand) -> Result<StopActorAck> {
+pub async fn stop_actor(cmd: StopActorCommand) -> Result<StopActorAck> {
     let client = client_from_opts(cmd.opts).await?;
     client
         .stop_actor(&cmd.host_id, &cmd.actor_ref)
@@ -276,14 +361,31 @@ pub async fn stop_actor(cmd: ActorCommand) -> Result<StopActorAck> {
         .map_err(convert_error)
 }
 
+/// Transforms a Vec of constraints (label=value) to a hashmap
+fn constraints_vec_to_hashmap(constraints: Vec<String>) -> Result<HashMap<String, String>> {
+    let mut hm: HashMap<String, String> = HashMap::new();
+    let mut iter = constraints.iter();
+    while let Some(constraint) = iter.next() {
+        let key_value = constraint.split('=').collect::<Vec<_>>();
+        if key_value.len() < 2 {
+            return Err(
+                "Constraints were not properly formatted. Ensure they are formatted as label=value"
+                    .into(),
+            );
+        }
+        hm.insert(key_value[0].to_string(), key_value[1].to_string()); // [0] key, [1] value
+    }
+    Ok(hm)
+}
+
 /// Helper function to print a Host list to stdout as a table
-fn display_hosts(hosts: Vec<Host>, ns_prefix: Option<String>) {
+fn display_hosts(hosts: Vec<Host>, ns_prefix: String) {
     let mut table = Table::new();
     table.max_column_width = 68;
     table.style = TableStyle::extended();
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
-        format!("Hosts - {}", ns_prefix.unwrap_or("".to_string())),
+        format!("Hosts - Namespace \"{}\"", ns_prefix),
         2,
         Alignment::Center,
     )]));
@@ -398,13 +500,13 @@ fn display_host_inventory(inv: HostInventory) {
 }
 
 /// Helper function to print a ClaimsList to stdout as a table
-fn display_claims(list: ClaimsList, ns_prefix: Option<String>) {
+fn display_claims(list: ClaimsList, ns_prefix: String) {
     let mut table = Table::new();
     table.max_column_width = 68;
     table.style = TableStyle::extended();
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
-        format!("Claims - {}", ns_prefix.unwrap_or("".to_string())),
+        format!("Claims - Namespace \"{}\"", ns_prefix),
         2,
         Alignment::Center,
     )]));

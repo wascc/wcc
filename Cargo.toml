@@ -1,13 +1,13 @@
 [package]
 name = "wash-cli"
-version = "0.1.9"
+version = "0.1.11"
 authors = ["Brooks Townsend <brooksmtownsend@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/wasmcloud/wash"
 description = "wasmCloud Shell (wash) CLI tool"
 license = "Apache-2.0"
 readme = "README.md"
-keywords = ["webassembly", "wasmCloud", "wasmcloud", "wash"]
+keywords = ["webassembly", "wasmcloud", "wash"]
 categories = ["wasm", "command-line-utilities"]
 
 [badges]
@@ -21,6 +21,7 @@ serde = { version = "1.0.117", features = ["derive"] }
 crossbeam = "0.7.3"
 tokio = { version = "0.2.0" }
 spinners = "1.2.0"
+log = "0.4.11"
 nats = "0.8.6"
 
 nkeys = "0.0.11"
