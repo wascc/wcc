@@ -123,14 +123,18 @@ struct OperatorMetadata {
     #[structopt(short = "n", long = "name")]
     name: String,
 
-    /// Self signing operator key
-    /// Can either be seed value or path to seed file
-    #[structopt(short = "s", long = "seed", name = "signing-key")]
-    signing_key: Option<String>,
+    /// Path to issuer seed key (self signing operator). If this flag is not provided, the will be sourced from $WASH_KEYS ($HOME/.wash/keys) or generated for you if it cannot be found.
+    #[structopt(
+        short = "i",
+        long = "issuer",
+        env = "WASH_ISSUER_KEY",
+        hide_env_values = true
+    )]
+    issuer: Option<String>,
 
     /// Additional keys to add to valid signers list
     /// Can either be seed value or path to seed file
-    #[structopt(short = "k", long = "key", name = "additional-key")]
+    #[structopt(short = "a", long = "additional-key", name = "additional-keys")]
     additional_signing_keys: Option<Vec<String>>,
 
     #[structopt(flatten)]
@@ -161,9 +165,9 @@ struct AccountMetadata {
     )]
     subject: Option<String>,
 
-    /// Additional keys to add to valid signers list
+    /// Additional keys to add to valid signers list.
     /// Can either be seed value or path to seed file
-    #[structopt(short = "k", long = "key", name = "additional-key")]
+    #[structopt(short = "a", long = "additional-key", name = "additional-keys")]
     additional_signing_keys: Option<Vec<String>>,
 
     #[structopt(flatten)]
@@ -383,7 +387,7 @@ fn generate_actor(actor: &ActorMetadata) -> Result<(), Box<dyn ::std::error::Err
 
 fn generate_operator(operator: &OperatorMetadata) -> Result<(), Box<dyn ::std::error::Error>> {
     let self_sign_key = extract_keypair(
-        operator.signing_key.clone(),
+        operator.issuer.clone(),
         Some(operator.name.clone()),
         operator.common.directory.clone(),
         KeyPairType::Operator,
