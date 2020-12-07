@@ -1,13 +1,13 @@
 [package]
 name = "wash-cli"
-version = "0.1.8"
+version = "0.1.10"
 authors = ["Brooks Townsend <brooksmtownsend@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/wascc/wash"
 description = "waSCC Shell (wash) CLI tool"
 license = "Apache-2.0"
 readme = "README.md"
-keywords = ["webassembly", "wascc", "wash"]
+keywords = ["webassembly", "wasmcloud", "wash"]
 categories = ["wasm", "command-line-utilities"]
 
 [badges]
@@ -26,14 +26,17 @@ crossterm = "0.18.2"
 unicode-width = "0.1.8"
 tokio = { version = "0.2.0" }
 nats = "0.8.5"
+spinners = "1.2.0"
 
 nkeys = "0.0.11"
 latticeclient = "0.4.0"
 wascap = "0.5.1"
 term-table = "1.3.0"
 provider-archive = "0.3.0"
-wasmcloud-host = { git = "https://github.com/wascc/wasccd", branch = "main"}
 once_cell = "1.5.2"
+oci-distribution = { git = "https://github.com/brooksmtownsend/krustlet", branch = "oci-push" }
+wasmcloud-host = { git = "https://github.com/wasmcloud/wasmcloud", branch = "main" }
+
 
 [[bin]]
 name = "wash"

@@ -16,7 +16,6 @@ use tui::{
     Frame, Terminal,
 };
 use tui_logger::*;
-
 use wasmcloud_host::{Host, HostBuilder};
 
 type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
@@ -308,16 +307,16 @@ fn handle_up(cmd: UpCommand) -> Result<()> {
     Ok(())
 }
 
-async fn launch_host(rpc_host: String, rpc_port: String) -> Result<Host> {
-    let nc = nats::asynk::connect(&format!("{}:{}", rpc_host, rpc_port)).await?;
-    let host = HostBuilder::new()
-        .with_rpc_client(nc)
-        .with_namespace("wasccrepl")
-        .build();
-    host.start().await.unwrap();
+// async fn launch_host(rpc_host: String, rpc_port: String) -> Result<Host> {
+//     let nc = nats::asynk::connect(&format!("{}:{}", rpc_host, rpc_port)).await?;
+//     let host = HostBuilder::new()
+//         .with_rpc_client(nc)
+//         .with_namespace("wasccrepl")
+//         .build();
+//     host.start().await.unwrap();
 
-    Ok(host)
-}
+//     Ok(host)
+// }
 
 fn draw_ui(
     state: &InputState,
