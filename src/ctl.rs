@@ -1,16 +1,12 @@
 extern crate control_interface;
 use control_interface::*;
-use log::info;
-use std::collections::HashMap;
 use std::time::Duration;
 use structopt::StructOpt;
 use term_table::row::Row;
 use term_table::table_cell::*;
 use term_table::{Table, TableStyle};
-use tokio::runtime::Runtime;
 
-use crate::util::convert_error;
-type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
+use crate::util::{convert_error, json_str_to_msgpack_bytes, labels_vec_to_hashmap, Result};
 
 //TODO(brooksmtownsend): If theres a deadline that elapses, suggest specifying a namespace
 
@@ -34,16 +30,24 @@ pub struct ConnectionOpts {
     #[structopt(short = "n", long = "ns-prefix", default_value = "default")]
     ns_prefix: String,
 
-    /// Timeout length for RPC, defaults to 2 seconds
-    #[structopt(short = "t", long = "rpc_timeout", default_value = "2")]
+    /// Timeout length for RPC, defaults to 5 seconds
+    #[structopt(short = "t", long = "rpc-timeout", default_value = "5")]
     rpc_timeout: u64,
 }
 
 #[derive(Debug, Clone, StructOpt)]
 pub enum CtlCliCommand {
+    /// Invoke an operation on an actor
+    #[structopt(name = "call")]
+    Call(CallCommand),
+
     /// Retrieves information about the lattice
     #[structopt(name = "get")]
     Get(GetCommand),
+
+    /// Link an actor and a provider
+    #[structopt(name = "link")]
+    Link(LinkCommand),
 
     /// Start an actor or a provider
     #[structopt(name = "start")]
@@ -52,6 +56,24 @@ pub enum CtlCliCommand {
     /// Stop an actor or a provider
     #[structopt(name = "stop")]
     Stop(StopCommand),
+}
+
+#[derive(StructOpt, Debug, Clone)]
+pub struct CallCommand {
+    #[structopt(flatten)]
+    opts: ConnectionOpts,
+
+    /// Public key or OCI reference of actor
+    #[structopt(name = "actor-id")]
+    actor_id: String,
+
+    /// Operation to invoke on actor
+    #[structopt(name = "operation")]
+    operation: String,
+
+    /// Payload to send with operation (in the form of '{"field": "value"}' )
+    #[structopt(name = "data")]
+    pub data: Vec<String>,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -67,6 +89,32 @@ pub enum GetCommand {
     /// Query lattice for its claims cache
     #[structopt(name = "claims")]
     Claims(GetClaimsCommand),
+}
+
+#[derive(StructOpt, Debug, Clone)]
+pub struct LinkCommand {
+    #[structopt(flatten)]
+    opts: ConnectionOpts,
+
+    /// Public key or OCI reference of actor
+    #[structopt(name = "actor-id")]
+    pub(crate) actor_id: String,
+
+    /// Public key or OCI reference of provider
+    #[structopt(name = "provider-ref")]
+    pub(crate) provider_id: String,
+
+    /// Capability contract ID between actor and provider
+    #[structopt(name = "contract-id")]
+    contract_id: String,
+
+    /// Link name, defaults to "default"
+    #[structopt(short = "l", long = "link-name")]
+    link_name: Option<String>,
+
+    /// Environment values to provide alongside link
+    #[structopt(name = "values")]
+    values: Vec<String>,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -111,6 +159,12 @@ pub struct GetHostInventoryCommand {
 }
 
 #[derive(Debug, Clone, StructOpt)]
+pub struct GetClaimsCommand {
+    #[structopt(flatten)]
+    opts: ConnectionOpts,
+}
+
+#[derive(Debug, Clone, StructOpt)]
 pub struct StartActorCommand {
     #[structopt(flatten)]
     opts: ConnectionOpts,
@@ -121,7 +175,7 @@ pub struct StartActorCommand {
 
     /// Actor reference, e.g. the OCI URL for the actor
     #[structopt(name = "actor-ref")]
-    actor_ref: String,
+    pub actor_ref: String,
 
     /// Constraints for actor auction in the form of "label=value". If host-id is supplied, this list is ignored
     #[structopt(short = "c", long = "constraint", name = "constraints")]
@@ -142,17 +196,17 @@ pub struct StartProviderCommand {
 
     /// Provider reference, e.g. the OCI URL for the provider
     #[structopt(name = "provider-ref")]
-    provider_ref: String,
+    pub provider_ref: String,
 
     /// Link name of provider
-    #[structopt(short = "l", long = "link-name")]
-    link_name: Option<String>,
+    #[structopt(short = "l", long = "link-name", default_value = "default")]
+    link_name: String,
 
     /// Constraints for provider auction in the form of "label=value". If host-id is supplied, this list is ignored
     #[structopt(short = "c", long = "constraint", name = "constraints")]
     constraints: Option<Vec<String>>,
 
-    #[structopt(short = "o", long = "timeout", default_value = "2")]
+    #[structopt(short = "o", long = "timeout", default_value = "5")]
     timeout: u64,
 }
 
@@ -163,11 +217,11 @@ pub struct StopActorCommand {
 
     /// Id of host
     #[structopt(name = "host-id")]
-    host_id: String,
+    pub host_id: String,
 
     /// Actor reference, e.g. the OCI URL for the actor
     #[structopt(name = "actor-ref")]
-    actor_ref: String,
+    pub actor_ref: String,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -181,7 +235,7 @@ pub struct StopProviderCommand {
 
     /// Provider reference, e.g. the OCI URL for the provider
     #[structopt(name = "provider-ref")]
-    provider_ref: String,
+    pub provider_ref: String,
 
     /// Link name of provider
     #[structopt(name = "link-name")]
@@ -192,43 +246,49 @@ pub struct StopProviderCommand {
     contract_id: String,
 }
 
-#[derive(Debug, Clone, StructOpt)]
-pub struct GetClaimsCommand {
-    #[structopt(flatten)]
-    opts: ConnectionOpts,
-}
-
-pub fn handle_command(cli: CtlCli) -> Result<()> {
-    let mut rt = Runtime::new().unwrap();
-    // Since match arms are incompatible types, I can't surround this with a block_on
+pub(crate) async fn handle_command(cli: CtlCli) -> Result<()> {
     use CtlCliCommand::*;
+    //TODO: Here we should use a spinner to indicate command is running, for IG calls
     match cli.command {
+        Call(cmd) => {
+            let ir = call_actor(cmd).await?;
+            match ir.error {
+                Some(e) => println!("Error invoking actor: {}", e),
+                None => {
+                    println!("Invocation successful ({})", ir.invocation_id);
+                    //TODO(brooksmtownsend): String::from_utf8_lossy should be decoder only if one is not available
+                    println!("Call response (raw): {}", String::from_utf8_lossy(&ir.msg));
+                }
+            };
+        }
         Get(GetCommand::Hosts(cmd)) => {
             let ns = cmd.opts.ns_prefix.clone();
-            let hosts = rt.block_on(get_hosts(cmd))?;
-            display_hosts(hosts, ns);
+            let hosts = get_hosts(cmd).await?;
+            println!("{}", hosts_table(hosts, ns, None));
         }
         Get(GetCommand::HostInventory(cmd)) => {
-            let inv = rt.block_on(get_host_inventory(cmd))?;
-            display_host_inventory(inv);
+            let inv = get_host_inventory(cmd).await?;
+            println!("{}", host_inventory_table(inv, None));
         }
         Get(GetCommand::Claims(cmd)) => {
             let ns = cmd.opts.ns_prefix.clone();
-            let claims = rt.block_on(get_claims(cmd))?;
-            display_claims(claims, ns);
+            let claims = get_claims(cmd).await?;
+            println!("{}", claims_table(claims, ns));
+        }
+        Link(cmd) => {
+            advertise_link(cmd).await?;
         }
         Start(StartCommand::Actor(cmd)) => {
-            let ack = rt.block_on(start_actor(cmd))?;
-            info!(target: "command_interface", "{:?}", ack);
+            let ack = start_actor(cmd).await?;
         }
         Start(StartCommand::Provider(cmd)) => {
-            rt.block_on(start_provider(cmd))?;
+            start_provider(cmd).await?;
         }
         Stop(StopCommand::Actor(cmd)) => {
-            rt.block_on(stop_actor(cmd))?;
+            stop_actor(cmd).await?;
         }
         Stop(StopCommand::Provider(cmd)) => {
-            rt.block_on(stop_provider(cmd))?;
+            stop_provider(cmd).await?;
         }
     };
     Ok(())
@@ -254,6 +314,15 @@ async fn client_from_opts(opts: ConnectionOpts) -> Result<Client> {
     .await
 }
 
+pub async fn call_actor(cmd: CallCommand) -> Result<InvocationResponse> {
+    let client = client_from_opts(cmd.opts).await?;
+    let bytes = json_str_to_msgpack_bytes(cmd.data)?;
+    client
+        .call_actor(&cmd.actor_id, &cmd.operation, &bytes)
+        .await
+        .map_err(convert_error)
+}
+
 pub async fn get_hosts(cmd: GetHostsCommand) -> Result<Vec<Host>> {
     let timeout = Duration::from_secs(cmd.timeout);
     let client = client_from_opts(cmd.opts).await?;
@@ -273,6 +342,20 @@ pub async fn get_claims(cmd: GetClaimsCommand) -> Result<ClaimsList> {
     client.get_claims().await.map_err(convert_error)
 }
 
+pub async fn advertise_link(cmd: LinkCommand) -> Result<()> {
+    let client = client_from_opts(cmd.opts).await?;
+    client
+        .advertise_link(
+            &cmd.actor_id,
+            &cmd.provider_id,
+            &cmd.contract_id,
+            &cmd.link_name.unwrap_or("default".to_string()),
+            labels_vec_to_hashmap(cmd.values)?,
+        )
+        .await
+        .map_err(convert_error)
+}
+
 pub async fn start_actor(cmd: StartActorCommand) -> Result<StartActorAck> {
     let client = client_from_opts(cmd.opts.clone()).await?;
 
@@ -282,7 +365,7 @@ pub async fn start_actor(cmd: StartActorCommand) -> Result<StartActorAck> {
             let suitable_hosts = client
                 .perform_actor_auction(
                     &cmd.actor_ref,
-                    constraints_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
+                    labels_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
                     Duration::from_secs(cmd.timeout),
                 )
                 .await
@@ -307,35 +390,27 @@ pub async fn start_provider(cmd: StartProviderCommand) -> Result<StartProviderAc
     let host = match cmd.host_id {
         Some(host) => host,
         None => {
-            if let Some(link_name) = cmd.link_name.clone() {
-                let suitable_hosts = client
-                    .perform_provider_auction(
-                        &cmd.provider_ref,
-                        &link_name,
-                        constraints_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
-                        Duration::from_secs(cmd.timeout),
-                    )
-                    .await
-                    .map_err(convert_error)?;
-                if suitable_hosts.is_empty() {
-                    return Err(format!(
-                        "No suitable hosts found for provider {}",
-                        cmd.provider_ref
-                    )
-                    .into());
-                } else {
-                    suitable_hosts[0].host_id.to_string()
-                }
-            } else {
+            let suitable_hosts = client
+                .perform_provider_auction(
+                    &cmd.provider_ref,
+                    &cmd.link_name,
+                    labels_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
+                    Duration::from_secs(cmd.timeout),
+                )
+                .await
+                .map_err(convert_error)?;
+            if suitable_hosts.is_empty() {
                 return Err(
-                    "Link name is required if host id is omitted for start provider".into(),
+                    format!("No suitable hosts found for provider {}", cmd.provider_ref).into(),
                 );
+            } else {
+                suitable_hosts[0].host_id.to_string()
             }
         }
     };
 
     client
-        .start_provider(&host, &cmd.provider_ref, cmd.link_name)
+        .start_provider(&host, &cmd.provider_ref, Some(cmd.link_name))
         .await
         .map_err(convert_error)
 }
@@ -361,27 +436,13 @@ pub async fn stop_actor(cmd: StopActorCommand) -> Result<StopActorAck> {
         .map_err(convert_error)
 }
 
-/// Transforms a Vec of constraints (label=value) to a hashmap
-fn constraints_vec_to_hashmap(constraints: Vec<String>) -> Result<HashMap<String, String>> {
-    let mut hm: HashMap<String, String> = HashMap::new();
-    let mut iter = constraints.iter();
-    while let Some(constraint) = iter.next() {
-        let key_value = constraint.split('=').collect::<Vec<_>>();
-        if key_value.len() < 2 {
-            return Err(
-                "Constraints were not properly formatted. Ensure they are formatted as label=value"
-                    .into(),
-            );
-        }
-        hm.insert(key_value[0].to_string(), key_value[1].to_string()); // [0] key, [1] value
-    }
-    Ok(hm)
-}
-
 /// Helper function to print a Host list to stdout as a table
-fn display_hosts(hosts: Vec<Host>, ns_prefix: String) {
+pub(crate) fn hosts_table(hosts: Vec<Host>, ns_prefix: String, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    table.max_column_width = 68;
+    table.max_column_width = match max_width {
+        Some(n) => n,
+        None => 80,
+    };
     table.style = TableStyle::extended();
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
@@ -401,37 +462,40 @@ fn display_hosts(hosts: Vec<Host>, ns_prefix: String) {
         ]))
     });
 
-    println!("{}", table.render());
+    table.render()
 }
 
 /// Helper function to print a HostInventory to stdout as a table
-fn display_host_inventory(inv: HostInventory) {
+pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    table.max_column_width = 68;
+    table.max_column_width = match max_width {
+        Some(n) => n,
+        None => 80,
+    };
     table.style = TableStyle::extended();
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
         format!("Host Inventory - {}", inv.host_id),
-        3,
+        4,
         Alignment::Center,
     )]));
 
     if inv.labels.len() >= 1 {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "Labels",
-            3,
+            4,
             Alignment::Center,
         )]));
         inv.labels.iter().for_each(|(k, v)| {
             table.add_row(Row::new(vec![
-                TableCell::new_with_alignment(k, 1, Alignment::Left),
+                TableCell::new_with_alignment(k, 2, Alignment::Left),
                 TableCell::new_with_alignment(v, 2, Alignment::Right),
             ]))
         });
     } else {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "No labels present",
-            3,
+            4,
             Alignment::Center,
         )]));
     }
@@ -439,17 +503,17 @@ fn display_host_inventory(inv: HostInventory) {
     if inv.actors.len() >= 1 {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "Actors",
-            3,
+            4,
             Alignment::Center,
         )]));
         table.add_row(Row::new(vec![
-            TableCell::new_with_alignment("Actor ID", 1, Alignment::Left),
+            TableCell::new_with_alignment("Actor ID", 2, Alignment::Left),
             TableCell::new_with_alignment("Image Reference", 2, Alignment::Right),
         ]));
         inv.actors.iter().for_each(|a| {
             let a = a.clone();
             table.add_row(Row::new(vec![
-                TableCell::new_with_alignment(a.id, 1, Alignment::Left),
+                TableCell::new_with_alignment(a.id, 2, Alignment::Left),
                 TableCell::new_with_alignment(
                     a.image_ref.unwrap_or("N/A".to_string()),
                     2,
@@ -460,7 +524,7 @@ fn display_host_inventory(inv: HostInventory) {
     } else {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "No actors found",
-            3,
+            4,
             Alignment::Center,
         )]));
     }
@@ -468,18 +532,18 @@ fn display_host_inventory(inv: HostInventory) {
     if inv.providers.len() >= 1 {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "Providers",
-            3,
+            4,
             Alignment::Center,
         )]));
         table.add_row(Row::new(vec![
-            TableCell::new_with_alignment("Provider ID", 1, Alignment::Left),
+            TableCell::new_with_alignment("Provider ID", 2, Alignment::Left),
             TableCell::new_with_alignment("Link Name", 1, Alignment::Center),
             TableCell::new_with_alignment("Image Reference", 1, Alignment::Right),
         ]));
         inv.providers.iter().for_each(|p| {
             let p = p.clone();
             table.add_row(Row::new(vec![
-                TableCell::new_with_alignment(p.id, 1, Alignment::Left),
+                TableCell::new_with_alignment(p.id, 2, Alignment::Left),
                 TableCell::new_with_alignment(p.link_name, 1, Alignment::Center),
                 TableCell::new_with_alignment(
                     p.image_ref.unwrap_or("N/A".to_string()),
@@ -491,16 +555,16 @@ fn display_host_inventory(inv: HostInventory) {
     } else {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "No providers found",
-            3,
+            4,
             Alignment::Center,
         )]));
     }
 
-    println!("{}", table.render());
+    table.render()
 }
 
 /// Helper function to print a ClaimsList to stdout as a table
-fn display_claims(list: ClaimsList, ns_prefix: String) {
+pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
     let mut table = Table::new();
     table.max_column_width = 68;
     table.style = TableStyle::extended();
@@ -559,5 +623,5 @@ fn display_claims(list: ClaimsList, ns_prefix: String) {
         )]));
     });
 
-    println!("{}", table.render());
+    table.render()
 }
