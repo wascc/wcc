@@ -41,8 +41,8 @@ enum CliCommand {
     /// Generate and manage JWTs for wasmCloud Actors
     #[structopt(name = "claims")]
     Claims(ClaimsCli),
-    /// Generate and manage wasmCloud keys
-    #[structopt(name = "keys")]
+    /// Utilities for generating and managing keys
+    #[structopt(name = "keys", aliases = &["key"])]
     Keys(KeysCli),
     /// Interact with a wasmCloud control interface
     #[structopt(name = "ctl")]
@@ -53,7 +53,7 @@ enum CliCommand {
     /// Interact with OCI compliant registries
     #[structopt(name = "reg")]
     Reg(RegCli),
-    /// Utility to launch waSCC REPL environment
+    /// Launch waSCC REPL environment
     #[structopt(name = "up")]
     Up(UpCli),
 }
