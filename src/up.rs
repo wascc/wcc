@@ -1,15 +1,12 @@
 use crate::ctl::*;
-use crate::util::{convert_error, json_str_to_msgpack_bytes, labels_vec_to_hashmap, Result};
+use crate::util::{convert_error, Result};
 use control_interface::HostInventory;
 use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-use log::{debug, error, info, trace, warn, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use std::io::{self, Stdout};
 use std::{cell::RefCell, io::Write, rc::Rc};
 use structopt::{clap::AppSettings, StructOpt};
-// use term_table::row::Row;
-// use term_table::table_cell::*;
-// use term_table::{Table, TableStyle};
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -110,14 +107,6 @@ struct InputState {
     input_width: usize,
 }
 
-#[derive(Debug, Clone)]
-struct OutputState {
-    output: Vec<String>,
-    output_cursor: usize,
-    output_width: usize,
-    output_scroll: u16,
-}
-
 impl Default for InputState {
     fn default() -> Self {
         InputState {
@@ -157,6 +146,14 @@ impl InputState {
 
         (position.0 as u16, position.1 as u16)
     }
+}
+
+#[derive(Debug, Clone)]
+struct OutputState {
+    output: Vec<String>,
+    output_cursor: usize,
+    output_width: usize,
+    output_scroll: u16,
 }
 
 impl Default for OutputState {
@@ -212,6 +209,7 @@ impl WashRepl {
         Ok(())
     }
 
+    /// Handles key input by the user into the REPL
     async fn handle_key(&mut self, code: KeyCode, modifier: KeyModifiers) -> Result<()> {
         match code {
             KeyCode::Char(c) => {
@@ -297,7 +295,6 @@ impl WashRepl {
                     Ok(ReplCli { cmd }) => {
                         use ReplCliCommand::*;
                         //TODO(brooksmtownsend): Add loading / fetching messages to longer / blocking calls
-                        //TODO(brooksmtownsend): Handle error messages without quitting (e.g. stop ?ing the calls)
                         match cmd {
                             Clear => {
                                 info!(target: WASH_LOG_INFO, "Clearing REPL history");
@@ -314,14 +311,28 @@ impl WashRepl {
                                 };
                             }
                             Get(getcmd) => {
-                                handle_get(getcmd, &mut self.output_state).await?;
+                                match handle_get(getcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling get: {}", e),
+                                };
                             }
-                            Link(linkcmd) => handle_link(linkcmd, &mut self.output_state).await?,
+                            Link(linkcmd) => {
+                                match handle_link(linkcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling link: {}", e),
+                                }
+                            }
                             Start(startcmd) => {
-                                handle_start(startcmd, &mut self.output_state).await?;
+                                match handle_start(startcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling start: {}", e),
+                                };
                             }
                             Stop(stopcmd) => {
-                                handle_stop(stopcmd, &mut self.output_state).await?;
+                                match handle_stop(stopcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling stop: {}", e),
+                                };
                             }
                         }
                     }
@@ -346,6 +357,7 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
     // Initialize logger at default level Trace
     init_logger(LevelFilter::Trace).unwrap();
     set_default_level(LevelFilter::Trace);
+
     // Initialize terminal
     let backend = {
         crossterm::terminal::enable_raw_mode().unwrap();
@@ -357,6 +369,7 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
     terminal.clear().unwrap();
     terminal.hide_cursor().unwrap();
 
+    // Start REPL
     let mut repl = WashRepl::default();
     repl.draw_ui(&mut terminal)?;
     info!(target: WASH_LOG_INFO, "Initializing REPL...");
@@ -464,7 +477,7 @@ async fn handle_get(get_cmd: GetCommand, output_state: &mut OutputState) -> Resu
             debug!(target: WASH_CMD_INFO, "\n{:?}", hosts);
             log_to_output(
                 output_state,
-                //TODO(brooksmtownsend): Consistent formatting better than spaces
+                //TODO(brooksmtownsend): While this does format consistently, a better format is desired
                 format!(
                     " HOST_ID                                                    UPTIME(seconds) \n{}",
                     hosts
@@ -567,7 +580,7 @@ async fn handle_link(cmd: LinkCommand, output_state: &mut OutputState) -> Result
             info!(target: WASH_CMD_INFO, "Published link successfully");
             log_to_output(
                 output_state,
-                format!("Linked {} <-> {}", cmd.actor_id, cmd.provider_id),
+                format!("Published link {} <-> {}", cmd.actor_id, cmd.provider_id),
             );
         }
         Err(e) => error!(target: WASH_CMD_INFO, "Error publishing link {}", e),
@@ -576,8 +589,6 @@ async fn handle_link(cmd: LinkCommand, output_state: &mut OutputState) -> Result
 }
 
 async fn handle_call(cmd: CallCommand, output_state: &mut OutputState) -> Result<()> {
-    debug!(target: WASH_CMD_INFO, "DATA: {:?}", cmd.data);
-    debug!(target: WASH_CMD_INFO, "DATA JOIN: {:?}", cmd.data.join(""));
     match call_actor(cmd).await {
         Ok(r) => match r.error {
             Some(e) => error!(target: WASH_CMD_INFO, "Error invoking actor: {}", e),
@@ -599,7 +610,7 @@ async fn handle_call(cmd: CallCommand, output_state: &mut OutputState) -> Result
     Ok(())
 }
 
-/// Helper function to exit the alternate tui terminal
+/// Helper function to exit the alternate tui terminal without corrupting the user terminal
 fn cleanup_terminal(terminal: &mut Terminal<tui::backend::CrosstermBackend<std::io::Stdout>>) {
     terminal.show_cursor().unwrap();
     terminal.clear().unwrap();
@@ -607,7 +618,7 @@ fn cleanup_terminal(terminal: &mut Terminal<tui::backend::CrosstermBackend<std::
     terminal::disable_raw_mode().unwrap();
 }
 
-/// Helper function to append a message to the output log
+/// Append a message to the output log
 fn log_to_output(state: &mut OutputState, out: String) {
     // Reset output scroll to bottom
     state.output_cursor = state.output.len();
@@ -621,6 +632,7 @@ fn log_to_output(state: &mut OutputState, out: String) {
     state.output_cursor += 1;
 }
 
+/// Formats a host inventory for display in the Output window
 fn format_inventory_for_output(inventory: &HostInventory) -> String {
     let l = inventory
         .labels
@@ -659,7 +671,7 @@ fn format_inventory_for_output(inventory: &HostInventory) -> String {
     )
 }
 
-//TODO(brooksmtownsend): Automatic word wrap screws with cursor placement. consider manual
+//TODO(brooksmtownsend): Automatic word wrap can throw off cursor placement. consider a manual solution
 /// Display the wash REPL in the provided panel, automatically scroll with overflow
 fn draw_input_panel(
     frame: &mut Frame<CrosstermBackend<Stdout>>,
@@ -695,9 +707,8 @@ fn draw_input_panel(
         .wrap(Wrap { trim: true });
     frame.render_widget(input_panel, chunk);
 
-    // Draw cursor on screen
     // Offset X by length of prompt plus current cursor
-    // Offset Y by length of history (*2 for newlines)
+    // Offset Y by length of input history
     let input_cursor = state.cursor_location(state.input_width);
     let x_offset = if input_cursor.1 < 1 {
         prompt.len() as u16
@@ -705,6 +716,7 @@ fn draw_input_panel(
         1
     };
 
+    // Draw cursor on screen
     frame.set_cursor(
         chunk.x + 1 + input_cursor.0 + x_offset,
         chunk.y + 1 + input_cursor.1 + state.multiline_input + state.history.len() as u16

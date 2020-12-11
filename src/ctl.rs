@@ -248,7 +248,7 @@ pub struct StopProviderCommand {
 
 pub(crate) async fn handle_command(cli: CtlCli) -> Result<()> {
     use CtlCliCommand::*;
-    //TODO: Here we should use a spinner to indicate command is running, for IG calls
+    //TODO: Here we should use a spinner to indicate command is running, for longer calls
     match cli.command {
         Call(cmd) => {
             let ir = call_actor(cmd).await?;
@@ -276,19 +276,40 @@ pub(crate) async fn handle_command(cli: CtlCli) -> Result<()> {
             println!("{}", claims_table(claims, ns));
         }
         Link(cmd) => {
-            advertise_link(cmd).await?;
+            match advertise_link(cmd.clone()).await {
+                Ok(_) => println!(
+                    "Advertised link ({}) <-> ({}) successfully",
+                    cmd.actor_id, cmd.provider_id
+                ),
+                Err(e) => println!("Error advertising link: {}", e),
+            };
         }
         Start(StartCommand::Actor(cmd)) => {
-            let ack = start_actor(cmd).await?;
+            match start_actor(cmd).await {
+                Ok(r) => println!("Actor {} being scheduled on host {}", r.actor_id, r.host_id),
+                Err(e) => println!("Error starting actor: {}", e),
+            };
         }
         Start(StartCommand::Provider(cmd)) => {
-            start_provider(cmd).await?;
+            match start_provider(cmd).await {
+                Ok(r) => println!(
+                    "Provider {} being scheduled on host {}",
+                    r.provider_id, r.host_id
+                ),
+                Err(e) => println!("Error starting provider: {}", e),
+            };
         }
         Stop(StopCommand::Actor(cmd)) => {
-            stop_actor(cmd).await?;
+            match stop_actor(cmd.clone()).await?.failure {
+                Some(f) => println!("Error stopping actor: {}", f),
+                None => println!("Stopping actor: {}", cmd.actor_ref),
+            };
         }
         Stop(StopCommand::Provider(cmd)) => {
-            stop_provider(cmd).await?;
+            match stop_provider(cmd.clone()).await?.failure {
+                Some(f) => println!("Error stopping provider: {}", f),
+                None => println!("Stopping provider: {}", cmd.provider_ref),
+            };
         }
     };
     Ok(())
