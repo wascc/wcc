@@ -1,6 +1,5 @@
 use crate::ctl::*;
 use crate::util::{convert_error, Result};
-use control_interface::HostInventory;
 use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use log::{debug, error, info, LevelFilter};
@@ -476,29 +475,28 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
 async fn handle_get(get_cmd: GetCommand, output_state: &mut OutputState) -> Result<()> {
     match get_cmd {
         GetCommand::Claims(cmd) => {
-            //TODO(brooksmtownsend): log claims to output
             let claims_list = get_claims(cmd).await?;
-            info!(target: WASH_CMD_INFO, "\n{:?}", claims_list);
+            debug!(target: WASH_CMD_INFO, "\n{:?}", claims_list);
+            log_to_output(
+                output_state,
+                claims_table(claims_list, Some(output_state.output_width)),
+            )
         }
         GetCommand::Hosts(cmd) => {
             let hosts = get_hosts(cmd).await?;
             debug!(target: WASH_CMD_INFO, "\n{:?}", hosts);
             log_to_output(
                 output_state,
-                //TODO(brooksmtownsend): While this does format consistently, a better format is desired
-                format!(
-                    " HOST_ID                                                    UPTIME(seconds) \n{}",
-                    hosts
-                        .iter()
-                        .map(|h| format!(" {}   {}", h.id.clone(), h.uptime_seconds))
-                        .collect::<Vec<_>>()
-                        .join("\n")),
-                )
+                hosts_table(hosts, Some(output_state.output_width)),
+            )
         }
         GetCommand::HostInventory(cmd) => {
             let inventory = get_host_inventory(cmd).await?;
             debug!(target: WASH_CMD_INFO, "\n{:?}", inventory);
-            log_to_output(output_state, format_inventory_for_output(&inventory))
+            log_to_output(
+                output_state,
+                host_inventory_table(inventory, Some(output_state.output_width)),
+            )
         }
     };
     Ok(())
@@ -656,45 +654,6 @@ fn format_input_for_display(input_vec: Vec<char>, input_width: usize) -> String 
         }
     }
     input
-}
-
-/// Formats a host inventory for display in the Output window
-fn format_inventory_for_output(inventory: &HostInventory) -> String {
-    let l = inventory
-        .labels
-        .iter()
-        .map(|(k, v)| format!("  {}={}\n", k, v))
-        .collect::<String>();
-
-    let a = inventory
-        .actors
-        .iter()
-        .map(|a| {
-            format!(
-                "  {}   {}\n",
-                a.id,
-                a.image_ref.clone().unwrap_or("N/A".to_string())
-            )
-        })
-        .collect::<String>();
-
-    let p = inventory
-        .providers
-        .iter()
-        .map(|p| {
-            format!(
-                "  {}   {}   {}\n",
-                p.id,
-                p.link_name,
-                p.image_ref.clone().unwrap_or("N/A".to_string())
-            )
-        })
-        .collect::<String>();
-
-    format!(
-        "HOST INVENTORY ({})\nLABELS\n{}\nACTORS\n{}\nPROVIDERS\n{}",
-        inventory.host_id, l, a, p
-    )
 }
 
 /// Display the wash REPL in the provided panel, automatically scroll with overflow

@@ -1,5 +1,6 @@
 extern crate control_interface;
 use control_interface::*;
+use spinners::{Spinner, Spinners};
 use std::time::Duration;
 use structopt::StructOpt;
 use term_table::row::Row;
@@ -248,70 +249,86 @@ pub struct StopProviderCommand {
 
 pub(crate) async fn handle_command(cli: CtlCli) -> Result<()> {
     use CtlCliCommand::*;
-    //TODO: Here we should use a spinner to indicate command is running, for longer calls
-    match cli.command {
+    let sp: Spinner = Spinner::new(Spinners::Dots12, "".to_string());
+    let output = match cli.command {
         Call(cmd) => {
+            sp.message(format!(" Calling Actor {} ...", cmd.actor_id));
             let ir = call_actor(cmd).await?;
             match ir.error {
-                Some(e) => println!("Error invoking actor: {}", e),
+                Some(e) => format!("Error invoking actor: {}", e),
                 None => {
-                    println!("Invocation successful ({})", ir.invocation_id);
                     //TODO(brooksmtownsend): String::from_utf8_lossy should be decoder only if one is not available
-                    println!("Call response (raw): {}", String::from_utf8_lossy(&ir.msg));
+                    format!("Call response (raw): {}", String::from_utf8_lossy(&ir.msg))
                 }
-            };
+            }
         }
         Get(GetCommand::Hosts(cmd)) => {
-            let ns = cmd.opts.ns_prefix.clone();
+            sp.message(format!(" Retrieving Hosts ..."));
             let hosts = get_hosts(cmd).await?;
-            println!("{}", hosts_table(hosts, ns, None));
+            format!("{}", hosts_table(hosts, None))
         }
         Get(GetCommand::HostInventory(cmd)) => {
+            sp.message(format!(
+                " Retrieving inventory for host {} ...",
+                cmd.host_id
+            ));
             let inv = get_host_inventory(cmd).await?;
-            println!("{}", host_inventory_table(inv, None));
+            format!("{}", host_inventory_table(inv, None))
         }
         Get(GetCommand::Claims(cmd)) => {
-            let ns = cmd.opts.ns_prefix.clone();
+            sp.message(format!(" Retrieving claims ... "));
             let claims = get_claims(cmd).await?;
-            println!("{}", claims_table(claims, ns));
+            format!("{}", claims_table(claims, None))
         }
         Link(cmd) => {
+            sp.message(format!(
+                " Advertising link between {} and {} ... ",
+                cmd.actor_id, cmd.provider_id
+            ));
             match advertise_link(cmd.clone()).await {
-                Ok(_) => println!(
+                Ok(_) => format!(
                     "Advertised link ({}) <-> ({}) successfully",
                     cmd.actor_id, cmd.provider_id
                 ),
-                Err(e) => println!("Error advertising link: {}", e),
-            };
+                Err(e) => format!("Error advertising link: {}", e),
+            }
         }
         Start(StartCommand::Actor(cmd)) => {
+            sp.message(format!(" Starting actor {} ... ", cmd.actor_ref));
             match start_actor(cmd).await {
-                Ok(r) => println!("Actor {} being scheduled on host {}", r.actor_id, r.host_id),
-                Err(e) => println!("Error starting actor: {}", e),
-            };
+                Ok(r) => format!("Actor {} being scheduled on host {}", r.actor_id, r.host_id),
+                Err(e) => format!("Error starting actor: {}", e),
+            }
         }
         Start(StartCommand::Provider(cmd)) => {
+            sp.message(format!(" Starting provider {} ... ", cmd.provider_ref));
             match start_provider(cmd).await {
-                Ok(r) => println!(
+                Ok(r) => format!(
                     "Provider {} being scheduled on host {}",
                     r.provider_id, r.host_id
                 ),
-                Err(e) => println!("Error starting provider: {}", e),
-            };
+                Err(e) => format!("Error starting provider: {}", e),
+            }
         }
         Stop(StopCommand::Actor(cmd)) => {
+            sp.message(format!(" Stopping actor {} ... ", cmd.actor_ref));
             match stop_actor(cmd.clone()).await?.failure {
-                Some(f) => println!("Error stopping actor: {}", f),
-                None => println!("Stopping actor: {}", cmd.actor_ref),
-            };
+                Some(f) => format!("Error stopping actor: {}", f),
+                None => format!("Stopping actor: {}", cmd.actor_ref),
+            }
         }
         Stop(StopCommand::Provider(cmd)) => {
+            sp.message(format!(" Stopping provider {} ... ", cmd.provider_ref));
             match stop_provider(cmd.clone()).await?.failure {
-                Some(f) => println!("Error stopping provider: {}", f),
-                None => println!("Stopping provider: {}", cmd.provider_ref),
-            };
+                Some(f) => format!("Error stopping provider: {}", f),
+                None => format!("Stopping provider: {}", cmd.provider_ref),
+            }
         }
     };
+
+    sp.stop();
+    println!("\n{}", output);
+
     Ok(())
 }
 
@@ -458,28 +475,23 @@ pub async fn stop_actor(cmd: StopActorCommand) -> Result<StopActorAck> {
 }
 
 /// Helper function to print a Host list to stdout as a table
-pub(crate) fn hosts_table(hosts: Vec<Host>, ns_prefix: String, max_width: Option<usize>) -> String {
+pub(crate) fn hosts_table(hosts: Vec<Host>, max_width: Option<usize>) -> String {
     let mut table = Table::new();
     table.max_column_width = match max_width {
         Some(n) => n,
         None => 80,
     };
-    table.style = TableStyle::extended();
-
-    table.add_row(Row::new(vec![TableCell::new_with_alignment(
-        format!("Hosts - Namespace \"{}\"", ns_prefix),
-        2,
-        Alignment::Center,
-    )]));
+    table.style = TableStyle::blank();
+    table.separate_rows = false;
 
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Host ID", 1, Alignment::Left),
-        TableCell::new_with_alignment("Uptime (seconds)", 1, Alignment::Right),
+        TableCell::new_with_alignment("Uptime (seconds)", 1, Alignment::Left),
     ]));
     hosts.iter().for_each(|h| {
         table.add_row(Row::new(vec![
             TableCell::new_with_alignment(h.id.clone(), 1, Alignment::Left),
-            TableCell::new_with_alignment(format!("{}", h.uptime_seconds), 1, Alignment::Right),
+            TableCell::new_with_alignment(format!("{}", h.uptime_seconds), 1, Alignment::Left),
         ]))
     });
 
@@ -493,24 +505,25 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
         Some(n) => n,
         None => 80,
     };
-    table.style = TableStyle::extended();
+    table.style = TableStyle::blank();
+    table.separate_rows = false;
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
-        format!("Host Inventory - {}", inv.host_id),
+        format!("Host Inventory ({})", inv.host_id),
         4,
         Alignment::Center,
     )]));
 
     if inv.labels.len() >= 1 {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
-            "Labels",
+            "",
             4,
             Alignment::Center,
         )]));
         inv.labels.iter().for_each(|(k, v)| {
             table.add_row(Row::new(vec![
                 TableCell::new_with_alignment(k, 2, Alignment::Left),
-                TableCell::new_with_alignment(v, 2, Alignment::Right),
+                TableCell::new_with_alignment(v, 2, Alignment::Left),
             ]))
         });
     } else {
@@ -523,13 +536,13 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
 
     if inv.actors.len() >= 1 {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
-            "Actors",
+            "",
             4,
             Alignment::Center,
         )]));
         table.add_row(Row::new(vec![
             TableCell::new_with_alignment("Actor ID", 2, Alignment::Left),
-            TableCell::new_with_alignment("Image Reference", 2, Alignment::Right),
+            TableCell::new_with_alignment("Image Reference", 2, Alignment::Left),
         ]));
         inv.actors.iter().for_each(|a| {
             let a = a.clone();
@@ -538,7 +551,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
                 TableCell::new_with_alignment(
                     a.image_ref.unwrap_or("N/A".to_string()),
                     2,
-                    Alignment::Right,
+                    Alignment::Left,
                 ),
             ]))
         });
@@ -552,24 +565,24 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
 
     if inv.providers.len() >= 1 {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
-            "Providers",
+            "",
             4,
             Alignment::Center,
         )]));
         table.add_row(Row::new(vec![
             TableCell::new_with_alignment("Provider ID", 2, Alignment::Left),
-            TableCell::new_with_alignment("Link Name", 1, Alignment::Center),
-            TableCell::new_with_alignment("Image Reference", 1, Alignment::Right),
+            TableCell::new_with_alignment("Link Name", 1, Alignment::Left),
+            TableCell::new_with_alignment("Image Reference", 1, Alignment::Left),
         ]));
         inv.providers.iter().for_each(|p| {
             let p = p.clone();
             table.add_row(Row::new(vec![
                 TableCell::new_with_alignment(p.id, 2, Alignment::Left),
-                TableCell::new_with_alignment(p.link_name, 1, Alignment::Center),
+                TableCell::new_with_alignment(p.link_name, 1, Alignment::Left),
                 TableCell::new_with_alignment(
                     p.image_ref.unwrap_or("N/A".to_string()),
                     1,
-                    Alignment::Right,
+                    Alignment::Left,
                 ),
             ]))
         });
@@ -577,7 +590,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "No providers found",
             4,
-            Alignment::Center,
+            Alignment::Left,
         )]));
     }
 
@@ -585,13 +598,17 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
 }
 
 /// Helper function to print a ClaimsList to stdout as a table
-pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
+pub(crate) fn claims_table(list: ClaimsList, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    table.max_column_width = 68;
-    table.style = TableStyle::extended();
+    table.style = TableStyle::blank();
+    table.separate_rows = false;
+    table.max_column_width = match max_width {
+        Some(n) => n,
+        None => 80,
+    };
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
-        format!("Claims - Namespace \"{}\"", ns_prefix),
+        "Claims",
         2,
         Alignment::Center,
     )]));
@@ -602,7 +619,7 @@ pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
             TableCell::new_with_alignment(
                 c.values.get("iss").unwrap_or(&"".to_string()),
                 1,
-                Alignment::Right,
+                Alignment::Left,
             ),
         ]));
         table.add_row(Row::new(vec![
@@ -610,7 +627,7 @@ pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
             TableCell::new_with_alignment(
                 c.values.get("sub").unwrap_or(&"".to_string()),
                 1,
-                Alignment::Right,
+                Alignment::Left,
             ),
         ]));
         table.add_row(Row::new(vec![
@@ -618,7 +635,7 @@ pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
             TableCell::new_with_alignment(
                 c.values.get("caps").unwrap_or(&"".to_string()),
                 1,
-                Alignment::Right,
+                Alignment::Left,
             ),
         ]));
         table.add_row(Row::new(vec![
@@ -626,7 +643,7 @@ pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
             TableCell::new_with_alignment(
                 c.values.get("version").unwrap_or(&"".to_string()),
                 1,
-                Alignment::Right,
+                Alignment::Left,
             ),
         ]));
         table.add_row(Row::new(vec![
@@ -634,7 +651,7 @@ pub(crate) fn claims_table(list: ClaimsList, ns_prefix: String) -> String {
             TableCell::new_with_alignment(
                 c.values.get("rev").unwrap_or(&"".to_string()),
                 1,
-                Alignment::Right,
+                Alignment::Left,
             ),
         ]));
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
