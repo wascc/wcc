@@ -21,6 +21,7 @@ use wasmcloud_host::HostBuilder;
 const WASH_LOG_INFO: &str = "WASH_LOG";
 const WASH_CMD_INFO: &str = "WASH_CMD";
 const CTL_NS: &str = "default";
+const WASH_PROMPT: &str = "wash> ";
 
 #[derive(Debug, StructOpt, Clone)]
 #[structopt(
@@ -103,7 +104,7 @@ struct InputState {
     history_cursor: usize,
     input: Vec<char>,
     input_cursor: usize,
-    multiline_input: u16, // amount to offset cursor for multiline inputs
+    multiline_history: u16, // amount to offset cursor for multiline inputs
     input_width: usize,
 }
 
@@ -114,35 +115,29 @@ impl Default for InputState {
             history_cursor: 0,
             input: vec![],
             input_cursor: 0,
-            multiline_input: 0,
+            multiline_history: 0,
             input_width: 0,
         }
     }
 }
 
 impl InputState {
-    fn cursor_location(&self, width: usize) -> (u16, u16) {
+    fn cursor_location(&self) -> (u16, u16) {
         let mut position = (0, 0);
 
-        for current_char in self.input.iter().take(self.input_cursor) {
-            let char_width = unicode_width::UnicodeWidthChar::width(*current_char).unwrap_or(0);
+        position.0 += WASH_PROMPT.len();
 
-            position.0 += char_width;
-
-            match position.0.cmp(&width) {
-                std::cmp::Ordering::Equal => {
-                    position.0 = 0;
-                    position.1 += 1;
-                }
-                std::cmp::Ordering::Greater => {
-                    // Handle a char with width > 1 at the end of the row
-                    // width - (char_width - 1) accounts for the empty column(s) left behind
-                    position.0 -= width - (char_width - 1);
-                    position.1 += 1;
-                }
-                _ => (),
+        for _c in &self.input {
+            position.0 += 1;
+            if position.0 == self.input_width {
+                position.0 = 0;
+                position.1 += 1;
             }
         }
+
+        // Offset Y by length of command history and multiline history
+        position.1 += self.history.len();
+        position.1 += self.multiline_history as usize;
 
         (position.0 as u16, position.1 as u16)
     }
@@ -213,7 +208,6 @@ impl WashRepl {
     async fn handle_key(&mut self, code: KeyCode, modifier: KeyModifiers) -> Result<()> {
         match code {
             KeyCode::Char(c) => {
-                //TODO(brooksmtownsend): Consider updating a vertical input "cursor" to keep up with multilines.
                 self.input_state
                     .input
                     .insert(self.input_state.input_cursor, c);
@@ -281,7 +275,7 @@ impl WashRepl {
 
                 let multilines = self.input_state.input.len() / self.input_state.input_width;
                 if multilines >= 1 {
-                    self.input_state.multiline_input += multilines as u16;
+                    self.input_state.multiline_history += multilines as u16;
                 };
 
                 self.input_state
@@ -379,20 +373,35 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
     repl.draw_ui(&mut terminal)?;
 
     // Launch host in separate thread to avoid blocking host operations
-    let rpc_host: &str = &*cmd.rpc_host;
-    let rpc_port = cmd.rpc_port.as_str();
     std::thread::spawn(move || {
         let mut rt = actix_rt::System::new("replhost");
-        rt.block_on(async {
-            //TODO(brooksmtownsend): Take these from structopt
-            let rpc_host = &"0.0.0.0";
-            let rpc_port = &"4222";
-            let nc_rpc = nats::asynk::connect(&format!("{}:{}", rpc_host, rpc_port))
-                .await
-                .unwrap();
-            let nc_control = nats::asynk::connect(&format!("{}:{}", rpc_host, rpc_port))
-                .await
-                .unwrap();
+        rt.block_on(async move {
+            let nc_rpc =
+                match nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await {
+                    Ok(conn) => conn,
+                    Err(_e) => {
+                        error!(
+                            target: WASH_CMD_INFO,
+                            "Error connecting to NATS at {}:{}, running in hostless mode",
+                            cmd.rpc_host,
+                            cmd.rpc_port
+                        );
+                        return;
+                    }
+                };
+            let nc_control =
+                match nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await {
+                    Ok(conn) => conn,
+                    Err(_e) => {
+                        error!(
+                            target: WASH_CMD_INFO,
+                            "Error connecting to NATS at {}:{}, running in hostless mode",
+                            cmd.rpc_host,
+                            cmd.rpc_port
+                        );
+                        return;
+                    }
+                };
             let host = HostBuilder::new()
                 .with_namespace(CTL_NS)
                 .with_rpc_client(nc_rpc)
@@ -400,18 +409,16 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
                 .with_label("repl_mode", "true")
                 .oci_allow_latest()
                 .build();
-            if let Err(e) = host.start().await.map_err(convert_error) {
-                error!(
+            if let Err(_e) = host.start().await.map_err(convert_error) {
+                error!(target: WASH_LOG_INFO, "Error launching REPL host");
+            } else {
+                info!(
                     target: WASH_LOG_INFO,
-                    "Error launching host, please ensure NATS is running. Continuing in hostless mode"
+                    "Host ({}) started in namespace ({})",
+                    host.id(),
+                    CTL_NS
                 );
             };
-            info!(
-                target: WASH_LOG_INFO,
-                "Host: {} started in namespace: {}",
-                host.id(),
-                CTL_NS
-            );
             // Since CTRL+C won't be captured by this thread, host will stop when REPL exits
             actix_rt::signal::ctrl_c().await.unwrap();
             host.stop().await;
@@ -462,6 +469,7 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
             repl.draw_ui(&mut terminal)?;
         }
     }
+    cleanup_terminal(&mut terminal);
     Ok(())
 }
 
@@ -632,6 +640,24 @@ fn log_to_output(state: &mut OutputState, out: String) {
     state.output_cursor += 1;
 }
 
+/// Helper function to delimit an input vec by newlines for proper REPL display
+fn format_input_for_display(input_vec: Vec<char>, input_width: usize) -> String {
+    let mut input = String::new();
+    let mut index = WASH_PROMPT.len() - 1;
+    let disp_iter = input_vec.iter();
+    for c in disp_iter {
+        if index == input_width - 1 {
+            input.push('\n');
+            input.push(*c);
+            index = 0;
+        } else {
+            input.push(*c);
+            index += 1;
+        }
+    }
+    input
+}
+
 /// Formats a host inventory for display in the Output window
 fn format_inventory_for_output(inventory: &HostInventory) -> String {
     let l = inventory
@@ -671,7 +697,6 @@ fn format_inventory_for_output(inventory: &HostInventory) -> String {
     )
 }
 
-//TODO(brooksmtownsend): Automatic word wrap can throw off cursor placement. consider a manual solution
 /// Display the wash REPL in the provided panel, automatically scroll with overflow
 fn draw_input_panel(
     frame: &mut Frame<CrosstermBackend<Stdout>>,
@@ -681,19 +706,32 @@ fn draw_input_panel(
     let history: String = state
         .history
         .iter()
-        .map(|h| format!("wash> {}\n", h.iter().collect::<String>()))
+        .map(|h| {
+            format!(
+                "{}{}\n",
+                WASH_PROMPT,
+                format_input_for_display(h.to_vec(), state.input_width)
+            )
+        })
         .collect();
-    let prompt: String = "wash> ".to_string();
-    let input = state.input.iter().collect::<String>();
-    let display = format!("{}{}{}", history, prompt, input);
+    let prompt: String = WASH_PROMPT.to_string();
+
+    let display = format!(
+        "{}{}{}",
+        history,
+        prompt,
+        format_input_for_display(state.input.clone(), state.input_width)
+    );
 
     // 5 is the offset from the bottom of the chunk (3) plus 2 lines for buffer
-    let scroll_offset = if state.history.len() as u16 + state.multiline_input >= chunk.height - 3 {
-        state.multiline_input + state.history.len() as u16 + 5 - chunk.height
+    let scroll_offset = if state.history.len() as u16 + state.multiline_history >= chunk.height - 3
+    {
+        state.multiline_history + state.history.len() as u16 + 5 - chunk.height
     } else {
         0
     };
-    state.input_width = chunk.width as usize - 2 - prompt.len();
+    // 3 is chunk size minus borders minus buffer space
+    state.input_width = chunk.width as usize - 3;
 
     // Draw REPL panel
     let input_panel = Paragraph::new(display)
@@ -703,24 +741,15 @@ fn draw_input_panel(
         )))
         .style(Style::default().fg(Color::White))
         .alignment(Alignment::Left)
-        .scroll((scroll_offset, 0))
-        .wrap(Wrap { trim: true });
+        .scroll((scroll_offset, 0));
     frame.render_widget(input_panel, chunk);
 
-    // Offset X by length of prompt plus current cursor
-    // Offset Y by length of input history
-    let input_cursor = state.cursor_location(state.input_width);
-    let x_offset = if input_cursor.1 < 1 {
-        prompt.len() as u16
-    } else {
-        1
-    };
+    let input_cursor = state.cursor_location();
 
     // Draw cursor on screen
     frame.set_cursor(
-        chunk.x + 1 + input_cursor.0 + x_offset,
-        chunk.y + 1 + input_cursor.1 + state.multiline_input + state.history.len() as u16
-            - scroll_offset,
+        chunk.x + 1 + input_cursor.0,
+        chunk.y + 1 + input_cursor.1 - scroll_offset,
     )
 }
 
