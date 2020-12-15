@@ -97,12 +97,12 @@ pub struct LinkCommand {
     #[structopt(flatten)]
     opts: ConnectionOpts,
 
-    /// Public key or OCI reference of actor
+    /// Public key ID of actor
     #[structopt(name = "actor-id")]
     pub(crate) actor_id: String,
 
-    /// Public key or OCI reference of provider
-    #[structopt(name = "provider-ref")]
+    /// Public key ID of provider
+    #[structopt(name = "provider-id")]
     pub(crate) provider_id: String,
 
     /// Capability contract ID between actor and provider
@@ -176,7 +176,7 @@ pub struct StartActorCommand {
 
     /// Actor reference, e.g. the OCI URL for the actor
     #[structopt(name = "actor-ref")]
-    pub actor_ref: String,
+    pub(crate) actor_ref: String,
 
     /// Constraints for actor auction in the form of "label=value". If host-id is supplied, this list is ignored
     #[structopt(short = "c", long = "constraint", name = "constraints")]
@@ -197,7 +197,7 @@ pub struct StartProviderCommand {
 
     /// Provider reference, e.g. the OCI URL for the provider
     #[structopt(name = "provider-ref")]
-    pub provider_ref: String,
+    pub(crate) provider_ref: String,
 
     /// Link name of provider
     #[structopt(short = "l", long = "link-name", default_value = "default")]
@@ -218,11 +218,11 @@ pub struct StopActorCommand {
 
     /// Id of host
     #[structopt(name = "host-id")]
-    pub host_id: String,
+    pub(crate) host_id: String,
 
     /// Actor reference, e.g. the OCI URL for the actor
     #[structopt(name = "actor-ref")]
-    pub actor_ref: String,
+    pub(crate) actor_ref: String,
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -236,7 +236,7 @@ pub struct StopProviderCommand {
 
     /// Provider reference, e.g. the OCI URL for the provider
     #[structopt(name = "provider-ref")]
-    pub provider_ref: String,
+    pub(crate) provider_ref: String,
 
     /// Link name of provider
     #[structopt(name = "link-name")]
