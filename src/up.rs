@@ -126,7 +126,7 @@ impl InputState {
 
         position.0 += WASH_PROMPT.len();
 
-        for _c in &self.input {
+        for _c in 0..self.input_cursor {
             position.0 += 1;
             if position.0 == self.input_width {
                 position.0 = 0;
@@ -407,6 +407,7 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
                 .with_control_client(nc_control)
                 .with_label("repl_mode", "true")
                 .oci_allow_latest()
+                .oci_allow_insecure()
                 .build();
             if let Err(_e) = host.start().await.map_err(convert_error) {
                 error!(target: WASH_LOG_INFO, "Error launching REPL host");
