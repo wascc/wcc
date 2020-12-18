@@ -296,14 +296,20 @@ async fn handle_inspect(cmd: InspectCommand) -> Result<()> {
 
     match cmd.output.kind {
         OutputKind::JSON => {
+            let friendly_rev = if metadata.rev.is_some() {
+                format!("{}", metadata.rev.unwrap())
+            } else {
+                "None".to_string()
+            };
+            let friendly_ver = metadata.ver.unwrap_or("None".to_string());
             println!(
                 "{}",
                 json!({"name": metadata.name.unwrap(),
                     "public_key": claims.subject,
                     "capability_contract_id": metadata.capid,
                     "vendor": metadata.vendor,
-                    "ver": metadata.ver,
-                    "rev": metadata.rev,
+                    "ver": friendly_ver,
+                    "rev": friendly_rev,
                     "targets": archive.targets()})
             );
         }
