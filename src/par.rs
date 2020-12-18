@@ -49,7 +49,7 @@ struct CreateCommand {
     revision: Option<i32>,
 
     /// Human friendly version string
-    #[structopt(name = "version")]
+    #[structopt(long = "version")]
     version: Option<String>,
 
     /// Location of key files for signing. Defaults to $WASH_KEYS ($HOME/.wash/keys)
