@@ -138,9 +138,7 @@ pub(crate) fn list(directory: Option<String>, output: &Output) {
                 println!("{}", key);
             }
         }
-        OutputKind::JSON => {
-            println!("{}", json!({ "keys": keys }))
-        }
+        OutputKind::JSON => println!("{}", json!({ "keys": keys })),
     }
 }
 

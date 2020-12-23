@@ -1,3 +1,4 @@
+use crate::claims::*;
 use crate::ctl::*;
 use crate::util::{convert_error, Result};
 use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
@@ -87,6 +88,18 @@ enum ReplCliCommand {
     /// Starts an actor or capability provider
     #[structopt(name = "stop")]
     Stop(StopCommand),
+
+    /// Signs a actor
+    #[structopt(name = "sign")]
+    Sign(SignCommand),
+
+    /// Signs a actor
+    #[structopt(name = "inspect")]
+    Inspect(InspectCommand),
+
+    /// Signs a actor
+    #[structopt(name = "token")]
+    Token(TokenCommand),
 
     /// Terminates the REPL environment (also accepts 'exit', 'logout', 'q' and ':q!')
     #[structopt(name = "quit", aliases = &["exit", "logout", "q", ":q!"])]
@@ -327,6 +340,24 @@ impl WashRepl {
                                     Err(e) => error!("Error handling stop: {}", e),
                                 };
                             }
+                            Sign(signcmd) => {
+                                match handle_sign(signcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling sign: {}", e),
+                                };
+                            }
+                            Inspect(inspectcmd) => {
+                                match handle_inspect(inspectcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling inspect: {}", e),
+                                };
+                            }
+                            Token(tokencmd) => {
+                                match handle_token(tokencmd, &mut self.output_state) {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling token: {}", e),
+                                }
+                            }
                         }
                     }
                     Err(e) => {
@@ -500,6 +531,25 @@ async fn handle_get(get_cmd: GetCommand, output_state: &mut OutputState) -> Resu
             )
         }
     };
+    Ok(())
+}
+
+async fn handle_sign(sign_cmd: SignCommand, output_state: &mut OutputState) -> Result<()> {
+    let source = sign_cmd.source.clone();
+    sign_file(sign_cmd)?;
+    log_to_output(output_state, format!("Successfully signed: {:?}", source));
+    Ok(())
+}
+
+async fn handle_inspect(inspect_cmd: InspectCommand, output_state: &mut OutputState) -> Result<()> {
+    let caps_output = render_caps(inspect_cmd).await?;
+    log_to_output(output_state, caps_output);
+    Ok(())
+}
+
+fn handle_token(token_cmd: TokenCommand, output_state: &mut OutputState) -> Result<()> {
+    let token_output = generate_token(token_cmd)?;
+    log_to_output(output_state, token_output);
     Ok(())
 }
 
