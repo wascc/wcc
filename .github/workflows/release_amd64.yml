@@ -29,6 +29,7 @@ jobs:
       - name: Package amd64 (RPM)
         run: ./bin/nfpm pkg --packager rpm -f build/nfpm.amd64.yaml
       - name: Push amd64 (Debian)
-        run: curl -F "package[distro_version_id]=190" -F "package[package_file]=@$(ls wash_*_amd64.deb)" https://$PACKAGECLOUD_TOKEN:@packagecloud.io/api/v1/repos/wasmCloud/core/packages.json
+        run: curl -F "package[distro_version_id]=203" -F "package[package_file]=@$(ls wash_*_amd64.deb)" https://$PACKAGECLOUD_TOKEN:@packagecloud.io/api/v1/repos/wasmCloud/core/packages.json
+        run: curl -F "package[distro_version_id]=210" -F "package[package_file]=@$(ls wash_*_amd64.deb)" https://$PACKAGECLOUD_TOKEN:@packagecloud.io/api/v1/repos/wasmCloud/core/packages.json
       - name: Push x86_64 (RPM)
-        run: curl -F "package[distro_version_id]=204" -F "package[package_file]=@$(ls wash-*.x86_64.rpm)" https://$PACKAGECLOUD_TOKEN:@packagecloud.io/api/v1/repos/wasmCloud/core/packages.json
+        run: curl -F "package[distro_version_id]=216" -F "package[package_file]=@$(ls wash-*.x86_64.rpm)" https://$PACKAGECLOUD_TOKEN:@packagecloud.io/api/v1/repos/wasmCloud/core/packages.json
