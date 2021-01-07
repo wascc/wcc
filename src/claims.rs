@@ -46,7 +46,7 @@ pub(crate) struct ClaimsCli {
 }
 
 #[derive(Debug, Clone, StructOpt)]
-enum ClaimsCliCommand {
+pub(crate) enum ClaimsCliCommand {
     /// Examine the capabilities of a WebAssembly module
     #[structopt(name = "inspect")]
     Inspect(InspectCommand),

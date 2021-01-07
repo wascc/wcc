@@ -69,37 +69,13 @@ struct ReplCli {
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(global_settings(&[AppSettings::ColorNever, AppSettings::DisableVersion, AppSettings::VersionlessSubcommands]))]
 enum ReplCliCommand {
-    /// Query lattice for information
-    #[structopt(name = "get")]
-    Get(GetCommand),
+    /// TODO(tiptop96)
+    #[structopt(name = "ctl")]
+    Ctl(CtlCliCommand),
 
-    /// Invokes an operation on an actor
-    #[structopt(name = "call")]
-    Call(CallCommand),
-
-    /// Links an actor and a capability provider
-    #[structopt(name = "link")]
-    Link(LinkCommand),
-
-    /// Starts an actor or capability provider
-    #[structopt(name = "start")]
-    Start(StartCommand),
-
-    /// Starts an actor or capability provider
-    #[structopt(name = "stop")]
-    Stop(StopCommand),
-
-    /// Signs a actor
-    #[structopt(name = "sign")]
-    Sign(SignCommand),
-
-    /// Signs a actor
-    #[structopt(name = "inspect")]
-    Inspect(InspectCommand),
-
-    /// Signs a actor
-    #[structopt(name = "token")]
-    Token(TokenCommand),
+    /// TODO(tiptop96)
+    #[structopt(name = "claims")]
+    Claims(ClaimsCliCommand),
 
     /// Terminates the REPL environment (also accepts 'exit', 'logout', 'q' and ':q!')
     #[structopt(name = "quit", aliases = &["exit", "logout", "q", ":q!"])]
@@ -310,53 +286,17 @@ impl WashRepl {
                                 info!(target: WASH_CMD_INFO, "Goodbye");
                                 return Err("REPL Quit".into());
                             }
-                            Call(callcmd) => {
-                                match handle_call(callcmd, &mut self.output_state).await {
+                            ReplCliCommand::Ctl(ctlcmd) => {
+                                match handle_ctl(ctlcmd, &mut self.output_state).await {
                                     Ok(r) => r,
-                                    Err(e) => error!("Error handling call: {}", e),
-                                };
-                            }
-                            Get(getcmd) => {
-                                match handle_get(getcmd, &mut self.output_state).await {
-                                    Ok(r) => r,
-                                    Err(e) => error!("Error handling get: {}", e),
-                                };
-                            }
-                            Link(linkcmd) => {
-                                match handle_link(linkcmd, &mut self.output_state).await {
-                                    Ok(r) => r,
-                                    Err(e) => error!("Error handling link: {}", e),
+                                    Err(e) => error!("Error handling ctl: {}", e),
                                 }
                             }
-                            Start(startcmd) => {
-                                match handle_start(startcmd, &mut self.output_state).await {
+                            ReplCliCommand::Claims(claimscmd) => {
+                                match handle_claims(claimscmd, &mut self.output_state).await {
                                     Ok(r) => r,
-                                    Err(e) => error!("Error handling start: {}", e),
+                                    Err(e) => error!("Error handling claims: {}", e),
                                 };
-                            }
-                            Stop(stopcmd) => {
-                                match handle_stop(stopcmd, &mut self.output_state).await {
-                                    Ok(r) => r,
-                                    Err(e) => error!("Error handling stop: {}", e),
-                                };
-                            }
-                            Sign(signcmd) => {
-                                match handle_sign(signcmd, &mut self.output_state).await {
-                                    Ok(r) => r,
-                                    Err(e) => error!("Error handling sign: {}", e),
-                                };
-                            }
-                            Inspect(inspectcmd) => {
-                                match handle_inspect(inspectcmd, &mut self.output_state).await {
-                                    Ok(r) => r,
-                                    Err(e) => error!("Error handling inspect: {}", e),
-                                };
-                            }
-                            Token(tokencmd) => {
-                                match handle_token(tokencmd, &mut self.output_state) {
-                                    Ok(r) => r,
-                                    Err(e) => error!("Error handling token: {}", e),
-                                }
                             }
                         }
                     }
@@ -504,51 +444,45 @@ async fn handle_up(cmd: UpCommand) -> Result<()> {
     Ok(())
 }
 
+async fn handle_claims(claims_cmd: ClaimsCliCommand, output_state: &mut OutputState) -> Result<()> {
+    let output = match claims_cmd {
+        ClaimsCliCommand::Inspect(inspectcmd) => render_caps(inspectcmd).await?,
+        ClaimsCliCommand::Sign(signcmd) => sign_file(signcmd)?,
+        ClaimsCliCommand::Token(gencmd) => generate_token(gencmd)?,
+    };
+    log_to_output(output_state, output);
+    Ok(())
+}
+
+async fn handle_ctl(claims_cmd: CtlCliCommand, output_state: &mut OutputState) -> Result<()> {
+    match claims_cmd {
+        CtlCliCommand::Call(callcmd) => handle_call(callcmd, output_state).await,
+        CtlCliCommand::Get(getcmd) => handle_get(getcmd, output_state).await,
+        CtlCliCommand::Link(linkcmd) => handle_link(linkcmd, output_state).await,
+        CtlCliCommand::Start(startcmd) => handle_start(startcmd, output_state).await,
+        CtlCliCommand::Stop(stopcmd) => handle_stop(stopcmd, output_state).await
+    }
+}
+
 async fn handle_get(get_cmd: GetCommand, output_state: &mut OutputState) -> Result<()> {
-    match get_cmd {
+    let output = match get_cmd {
         GetCommand::Claims(cmd) => {
             let claims_list = get_claims(cmd).await?;
             debug!(target: WASH_CMD_INFO, "\n{:?}", claims_list);
-            log_to_output(
-                output_state,
-                claims_table(claims_list, Some(output_state.output_width)),
-            )
+            claims_table(claims_list, Some(output_state.output_width))
         }
         GetCommand::Hosts(cmd) => {
             let hosts = get_hosts(cmd).await?;
             debug!(target: WASH_CMD_INFO, "\n{:?}", hosts);
-            log_to_output(
-                output_state,
-                hosts_table(hosts, Some(output_state.output_width)),
-            )
+            hosts_table(hosts, Some(output_state.output_width))
         }
         GetCommand::HostInventory(cmd) => {
             let inventory = get_host_inventory(cmd).await?;
             debug!(target: WASH_CMD_INFO, "\n{:?}", inventory);
-            log_to_output(
-                output_state,
-                host_inventory_table(inventory, Some(output_state.output_width)),
-            )
+            host_inventory_table(inventory, Some(output_state.output_width))
         }
     };
-    Ok(())
-}
-
-async fn handle_sign(sign_cmd: SignCommand, output_state: &mut OutputState) -> Result<()> {
-    let sign_output = sign_file(sign_cmd)?;
-    log_to_output(output_state, sign_output);
-    Ok(())
-}
-
-async fn handle_inspect(inspect_cmd: InspectCommand, output_state: &mut OutputState) -> Result<()> {
-    let caps_output = render_caps(inspect_cmd).await?;
-    log_to_output(output_state, caps_output);
-    Ok(())
-}
-
-fn handle_token(token_cmd: TokenCommand, output_state: &mut OutputState) -> Result<()> {
-    let token_output = generate_token(token_cmd)?;
-    log_to_output(output_state, token_output);
+    log_to_output(output_state, output);
     Ok(())
 }
 
