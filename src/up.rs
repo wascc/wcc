@@ -535,9 +535,8 @@ async fn handle_get(get_cmd: GetCommand, output_state: &mut OutputState) -> Resu
 }
 
 async fn handle_sign(sign_cmd: SignCommand, output_state: &mut OutputState) -> Result<()> {
-    let source = sign_cmd.source.clone();
-    sign_file(sign_cmd)?;
-    log_to_output(output_state, format!("Successfully signed: {:?}", source));
+    let sign_output = sign_file(sign_cmd)?;
+    log_to_output(output_state, sign_output);
     Ok(())
 }
 
