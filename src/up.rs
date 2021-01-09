@@ -1,3 +1,4 @@
+use crate::keys::*;
 use crate::claims::*;
 use crate::ctl::*;
 use crate::util::{convert_error, Result};
@@ -76,6 +77,10 @@ enum ReplCliCommand {
     /// TODO(tiptop96)
     #[structopt(name = "claims")]
     Claims(ClaimsCliCommand),
+
+    /// TODO(tiptop96)
+    #[structopt(name = "keys")]
+    Keys(KeysCliCommand),
 
     /// Terminates the REPL environment (also accepts 'exit', 'logout', 'q' and ':q!')
     #[structopt(name = "quit", aliases = &["exit", "logout", "q", ":q!"])]
@@ -298,6 +303,12 @@ impl WashRepl {
                                     Err(e) => error!("Error handling claims: {}", e),
                                 };
                             }
+                            ReplCliCommand::Keys(keyscmd) => {
+                                match handle_keys(keyscmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling claims: {}", e),
+                                }
+                            }
                         }
                     }
                     Err(e) => {
@@ -449,6 +460,26 @@ async fn handle_claims(claims_cmd: ClaimsCliCommand, output_state: &mut OutputSt
         ClaimsCliCommand::Inspect(inspectcmd) => render_caps(inspectcmd).await?,
         ClaimsCliCommand::Sign(signcmd) => sign_file(signcmd)?,
         ClaimsCliCommand::Token(gencmd) => generate_token(gencmd)?,
+    };
+    log_to_output(output_state, output);
+    Ok(())
+}
+
+async fn handle_keys(keys_cmd: KeysCliCommand, output_state: &mut OutputState) -> Result<()> {
+    let output = match keys_cmd {
+        KeysCliCommand::GenCommand { keytype, output } => {
+            generate(&keytype, &output.kind)
+        }
+        KeysCliCommand::GetCommand {
+            keyname,
+            directory,
+            output,
+        } => {
+            get(&keyname, directory, &output)?
+        }
+        KeysCliCommand::ListCommand { directory, output } => {
+            list(directory, &output)?
+        }
     };
     log_to_output(output_state, output);
     Ok(())
