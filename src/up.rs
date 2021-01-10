@@ -1,6 +1,7 @@
 use crate::keys::*;
 use crate::claims::*;
 use crate::ctl::*;
+use crate::par::*;
 use crate::util::{convert_error, Result};
 use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
@@ -81,6 +82,10 @@ enum ReplCliCommand {
     /// TODO(tiptop96)
     #[structopt(name = "keys")]
     Keys(KeysCliCommand),
+
+    /// TODO(tiptop96)
+    #[structopt(name = "par")]
+    Par(ParCliCommand),
 
     /// Terminates the REPL environment (also accepts 'exit', 'logout', 'q' and ':q!')
     #[structopt(name = "quit", aliases = &["exit", "logout", "q", ":q!"])]
@@ -306,7 +311,13 @@ impl WashRepl {
                             ReplCliCommand::Keys(keyscmd) => {
                                 match handle_keys(keyscmd, &mut self.output_state).await {
                                     Ok(r) => r,
-                                    Err(e) => error!("Error handling claims: {}", e),
+                                    Err(e) => error!("Error handling key: {}", e),
+                                }
+                            }
+                            ReplCliCommand::Par(parcmd) => {
+                                match handle_par(parcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling par: {}", e),
                                 }
                             }
                         }
@@ -481,6 +492,16 @@ async fn handle_keys(keys_cmd: KeysCliCommand, output_state: &mut OutputState) -
             list(directory, &output)?
         }
     };
+    log_to_output(output_state, output);
+    Ok(())
+}
+
+async fn handle_par(par_cmd: ParCliCommand, output_state: &mut OutputState) -> Result<()> {
+    let output = match par_cmd {
+        ParCliCommand::Create(cmd) => handle_create(cmd),
+        ParCliCommand::Inspect(cmd) => handle_inspect(cmd).await,
+        ParCliCommand::Insert(cmd) => handle_insert(cmd),
+    }?;
     log_to_output(output_state, output);
     Ok(())
 }
