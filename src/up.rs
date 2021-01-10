@@ -665,10 +665,26 @@ fn log_to_output(state: &mut OutputState, out: String) {
     // Reset output scroll to bottom
     state.output_cursor = state.output.len();
 
+    let output_width = state.output_width - 2;
+    
     // Newlines are used here for accurate scrolling in the Output pane
     out.split('\n').for_each(|line| {
-        state.output.push(line.to_string());
-        state.output_cursor += 1;
+        let line_len = line.chars().count();
+        if line_len > output_width {
+            let mut offset = 0;
+            // Div and round up
+            let n_lines = (line_len + (output_width - 1))/output_width;
+            for _ in 0..n_lines {
+                let sub_line = line.chars().skip(offset).take(output_width).collect();
+                state.output.push(sub_line);
+                offset += output_width
+            }
+            state.output_cursor += n_lines;
+        }
+        else {
+            state.output.push(line.to_string());
+            state.output_cursor += 1;
+        }
     });
     state.output.push("".to_string());
     state.output_cursor += 1;
