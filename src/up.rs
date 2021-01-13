@@ -2,7 +2,8 @@ use crate::keys::*;
 use crate::claims::*;
 use crate::ctl::*;
 use crate::par::*;
-use crate::util::{convert_error, Result};
+use crate::reg::*;
+use crate::util::{format_output, convert_error, Result};
 use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use log::{debug, error, info, LevelFilter};
@@ -19,6 +20,8 @@ use tui::{
 };
 use tui_logger::*;
 use wasmcloud_host::HostBuilder;
+use serde_json::json;
+use oci_distribution::Reference;
 
 const WASH_LOG_INFO: &str = "WASH_LOG";
 const WASH_CMD_INFO: &str = "WASH_CMD";
@@ -71,21 +74,25 @@ struct ReplCli {
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(global_settings(&[AppSettings::ColorNever, AppSettings::DisableVersion, AppSettings::VersionlessSubcommands]))]
 enum ReplCliCommand {
-    /// TODO(tiptop96)
+    /// Create, inspect, and modify capability provider archive files
     #[structopt(name = "ctl")]
     Ctl(CtlCliCommand),
 
-    /// TODO(tiptop96)
+    /// Generate and manage JWTs for wasmCloud Actors
     #[structopt(name = "claims")]
     Claims(ClaimsCliCommand),
 
-    /// TODO(tiptop96)
+    /// Utilities for generating and managing keys
     #[structopt(name = "keys")]
     Keys(KeysCliCommand),
 
-    /// TODO(tiptop96)
+    /// Interact with OCI compliant registries
     #[structopt(name = "par")]
     Par(ParCliCommand),
+
+    /// Launch wasmCloud REPL environment
+    #[structopt(name = "reg")]
+    Reg(RegCliCommand),
 
     /// Terminates the REPL environment (also accepts 'exit', 'logout', 'q' and ':q!')
     #[structopt(name = "quit", aliases = &["exit", "logout", "q", ":q!"])]
@@ -320,6 +327,12 @@ impl WashRepl {
                                     Err(e) => error!("Error handling par: {}", e),
                                 }
                             }
+                            ReplCliCommand::Reg(regcmd) => {
+                                match handle_reg(regcmd, &mut self.output_state).await {
+                                    Ok(r) => r,
+                                    Err(e) => error!("Error handling reg: {}", e),
+                                }
+                            }
                         }
                     }
                     Err(e) => {
@@ -504,6 +517,60 @@ async fn handle_par(par_cmd: ParCliCommand, output_state: &mut OutputState) -> R
     }?;
     log_to_output(output_state, output);
     Ok(())
+}
+
+async fn handle_reg(reg_cmd: RegCliCommand, output_state: &mut OutputState) -> Result<()> {
+    let output = match reg_cmd {
+        RegCliCommand::Pull(cmd) => handle_pull(cmd).await,
+        RegCliCommand::Push(cmd) => handle_push(cmd).await,
+    }?;
+    log_to_output(output_state, output);
+    Ok(())
+}
+
+async fn handle_pull(pull_cmd: PullCommand) -> Result<String> {
+    let image: Reference = pull_cmd.url.parse().unwrap();
+    let artifact = pull_artifact(
+        pull_cmd.url,
+        pull_cmd.digest,
+        pull_cmd.allow_latest,
+        pull_cmd.opts.user,
+        pull_cmd.opts.password,
+        pull_cmd.opts.insecure,
+    )
+    .await?;
+
+    let outfile = write_artifact(&artifact, &image, pull_cmd.destination)?;
+
+    Ok(format_output(
+        format!(
+            "\n{} Successfully pulled and validated {}",
+            SHOWER_EMOJI, outfile
+        ),
+        json!({"result": "success", "file": outfile}),
+        &pull_cmd.output.kind
+    ))
+}
+
+async fn handle_push(push_cmd: PushCommand) -> Result<String> {
+    push_artifact(
+        push_cmd.url.clone(),
+        push_cmd.artifact,
+        push_cmd.config,
+        push_cmd.allow_latest,
+        push_cmd.opts.user,
+        push_cmd.opts.password,
+        push_cmd.opts.insecure,
+    )
+    .await?;
+    Ok(format_output(
+        format!(
+            "\n{} Successfully validated and pushed to {}",
+            SHOWER_EMOJI, push_cmd.url
+        ),
+        json!({"result": "success", "url": push_cmd.url}),
+        &push_cmd.output.kind
+    ))
 }
 
 async fn handle_ctl(claims_cmd: CtlCliCommand, output_state: &mut OutputState) -> Result<()> {
