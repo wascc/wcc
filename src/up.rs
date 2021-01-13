@@ -538,7 +538,7 @@ async fn handle_pull(pull_cmd: PullCommand) -> Result<String> {
 
     Ok(format_output(
         format!(
-            "\n{} Successfully pulled and validated {}",
+            "{} Successfully pulled and validated {}",
             SHOWER_EMOJI, outfile
         ),
         json!({"result": "success", "file": outfile}),
@@ -559,7 +559,7 @@ async fn handle_push(push_cmd: PushCommand) -> Result<String> {
     .await?;
     Ok(format_output(
         format!(
-            "\n{} Successfully validated and pushed to {}",
+            "{} Successfully validated and pushed to {}",
             SHOWER_EMOJI, push_cmd.url
         ),
         json!({"result": "success", "url": push_cmd.url}),
