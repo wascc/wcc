@@ -57,23 +57,17 @@ pub(crate) enum KeysCliCommand {
 
 pub(crate) fn handle_command(cli: KeysCli) -> Result<(), Box<dyn ::std::error::Error>> {
     let output = match cli.command {
-        KeysCliCommand::GenCommand { keytype, output } => {
-            Ok(generate(&keytype, &output.kind))
-        }
+        KeysCliCommand::GenCommand { keytype, output } => Ok(generate(&keytype, &output.kind)),
         KeysCliCommand::GetCommand {
             keyname,
             directory,
             output,
-        } => {
-            get(&keyname, directory, &output)
-        }
-        KeysCliCommand::ListCommand { directory, output } => {
-            list(directory, &output)
-        }
+        } => get(&keyname, directory, &output),
+        KeysCliCommand::ListCommand { directory, output } => list(directory, &output),
     };
     match output {
         Ok(r) => println!("{}", r),
-        Err(e) => println!("Error: {}", e)
+        Err(e) => println!("Error: {}", e),
     }
     Ok(())
 }
@@ -96,12 +90,19 @@ pub(crate) fn generate(kt: &KeyPairType, output: &OutputKind) -> String {
 }
 
 /// Retrieves a keypair by name in a specified directory, or $WASH_KEYS ($HOME/.wash/keys) if directory is not specified
-pub(crate) fn get(keyname: &String, directory: Option<String>, output: &Output) -> Result<String, Error> {
+pub(crate) fn get(
+    keyname: &String,
+    directory: Option<String>,
+    output: &Output,
+) -> Result<String, Error> {
     let dir = determine_directory(directory);
     let mut f = match File::open(format!("{}/{}", dir, keyname)) {
         Ok(f) => f,
         Err(f) => {
-            return Err(Error::new(f.kind(), format!("{}.\nPlease ensure {}/{} exists.", f, dir, keyname)));
+            return Err(Error::new(
+                f.kind(),
+                format!("{}.\nPlease ensure {}/{} exists.", f, dir, keyname),
+            ));
         }
     };
     let mut s = String::new();
@@ -124,7 +125,12 @@ pub(crate) fn list(directory: Option<String>, output: &Output) -> Result<String,
 
     let mut keys = vec![];
     match fs::read_dir(dir.clone()) {
-        Err(e) => return Err(Error::new(e.kind(), format!("Error: {}, please ensure directory {} exists", e, dir))),
+        Err(e) => {
+            return Err(Error::new(
+                e.kind(),
+                format!("Error: {}, please ensure directory {} exists", e, dir),
+            ))
+        }
         Ok(paths) => {
             for path in paths {
                 let f = String::from(path.unwrap().file_name().to_str().unwrap());

@@ -250,24 +250,26 @@ pub(crate) fn handle_create(cmd: CreateCommand) -> Result<String> {
         ),
     };
 
-    Ok(if par
-        .write(&outfile, &issuer, &subject, cmd.compress)
-        .is_err()
-    {
-        format!(
-            "Error writing PAR. Please ensure directory {:?} exists",
-            PathBuf::from(outfile.clone()).parent().unwrap(),
-        )
-    } else {
-        format!(
-            "{}",
-            format_output(
-                format!("Successfully created archive {}", outfile),
-                json!({"result": "success", "file": outfile}),
-                &cmd.output.kind
+    Ok(
+        if par
+            .write(&outfile, &issuer, &subject, cmd.compress)
+            .is_err()
+        {
+            format!(
+                "Error writing PAR. Please ensure directory {:?} exists",
+                PathBuf::from(outfile.clone()).parent().unwrap(),
             )
-        )
-    })
+        } else {
+            format!(
+                "{}",
+                format_output(
+                    format!("Successfully created archive {}", outfile),
+                    json!({"result": "success", "file": outfile}),
+                    &cmd.output.kind
+                )
+            )
+        },
+    )
 }
 
 /// Loads a provider archive and prints the contents of the claims

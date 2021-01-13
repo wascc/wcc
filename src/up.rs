@@ -1,12 +1,14 @@
-use crate::keys::*;
 use crate::claims::*;
 use crate::ctl::*;
+use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
-use crate::util::{format_output, convert_error, Result};
+use crate::util::{convert_error, format_output, Result};
 use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use log::{debug, error, info, LevelFilter};
+use oci_distribution::Reference;
+use serde_json::json;
 use std::io::{self, Stdout};
 use std::{cell::RefCell, io::Write, rc::Rc};
 use structopt::{clap::AppSettings, StructOpt};
@@ -20,8 +22,6 @@ use tui::{
 };
 use tui_logger::*;
 use wasmcloud_host::HostBuilder;
-use serde_json::json;
-use oci_distribution::Reference;
 
 const WASH_LOG_INFO: &str = "WASH_LOG";
 const WASH_CMD_INFO: &str = "WASH_CMD";
@@ -491,19 +491,13 @@ async fn handle_claims(claims_cmd: ClaimsCliCommand, output_state: &mut OutputSt
 
 async fn handle_keys(keys_cmd: KeysCliCommand, output_state: &mut OutputState) -> Result<()> {
     let output = match keys_cmd {
-        KeysCliCommand::GenCommand { keytype, output } => {
-            generate(&keytype, &output.kind)
-        }
+        KeysCliCommand::GenCommand { keytype, output } => generate(&keytype, &output.kind),
         KeysCliCommand::GetCommand {
             keyname,
             directory,
             output,
-        } => {
-            get(&keyname, directory, &output)?
-        }
-        KeysCliCommand::ListCommand { directory, output } => {
-            list(directory, &output)?
-        }
+        } => get(&keyname, directory, &output)?,
+        KeysCliCommand::ListCommand { directory, output } => list(directory, &output)?,
     };
     log_to_output(output_state, output);
     Ok(())
@@ -548,7 +542,7 @@ async fn handle_pull(pull_cmd: PullCommand) -> Result<String> {
             SHOWER_EMOJI, outfile
         ),
         json!({"result": "success", "file": outfile}),
-        &pull_cmd.output.kind
+        &pull_cmd.output.kind,
     ))
 }
 
@@ -569,7 +563,7 @@ async fn handle_push(push_cmd: PushCommand) -> Result<String> {
             SHOWER_EMOJI, push_cmd.url
         ),
         json!({"result": "success", "url": push_cmd.url}),
-        &push_cmd.output.kind
+        &push_cmd.output.kind,
     ))
 }
 
@@ -579,7 +573,7 @@ async fn handle_ctl(claims_cmd: CtlCliCommand, output_state: &mut OutputState) -
         CtlCliCommand::Get(getcmd) => handle_get(getcmd, output_state).await,
         CtlCliCommand::Link(linkcmd) => handle_link(linkcmd, output_state).await,
         CtlCliCommand::Start(startcmd) => handle_start(startcmd, output_state).await,
-        CtlCliCommand::Stop(stopcmd) => handle_stop(stopcmd, output_state).await
+        CtlCliCommand::Stop(stopcmd) => handle_stop(stopcmd, output_state).await,
     }
 }
 
@@ -733,22 +727,21 @@ fn log_to_output(state: &mut OutputState, out: String) {
     state.output_cursor = state.output.len();
 
     let output_width = state.output_width - 2;
-    
+
     // Newlines are used here for accurate scrolling in the Output pane
     out.split('\n').for_each(|line| {
         let line_len = line.chars().count();
         if line_len > output_width {
             let mut offset = 0;
             // Div and round up
-            let n_lines = (line_len + (output_width - 1))/output_width;
+            let n_lines = (line_len + (output_width - 1)) / output_width;
             for _ in 0..n_lines {
                 let sub_line = line.chars().skip(offset).take(output_width).collect();
                 state.output.push(sub_line);
                 offset += output_width
             }
             state.output_cursor += n_lines;
-        }
-        else {
+        } else {
             state.output.push(line.to_string());
             state.output_cursor += 1;
         }
