@@ -524,6 +524,7 @@ async fn handle_reg(reg_cmd: RegCliCommand, output_state: &mut OutputState) -> R
 
 async fn handle_pull(pull_cmd: PullCommand) -> Result<String> {
     let image: Reference = pull_cmd.url.parse().unwrap();
+    debug!(" Downloading {} ...", image.whole());
     let artifact = pull_artifact(
         pull_cmd.url,
         pull_cmd.digest,
@@ -547,6 +548,7 @@ async fn handle_pull(pull_cmd: PullCommand) -> Result<String> {
 }
 
 async fn handle_push(push_cmd: PushCommand) -> Result<String> {
+    debug!(" Pushing {} to {} ...", push_cmd.artifact, push_cmd.url);
     push_artifact(
         push_cmd.url.clone(),
         push_cmd.artifact,
