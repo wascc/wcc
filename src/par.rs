@@ -260,13 +260,10 @@ pub(crate) fn handle_create(cmd: CreateCommand) -> Result<String> {
                 PathBuf::from(outfile.clone()).parent().unwrap(),
             )
         } else {
-            format!(
-                "{}",
-                format_output(
-                    format!("Successfully created archive {}", outfile),
-                    json!({"result": "success", "file": outfile}),
-                    &cmd.output.kind
-                )
+            format_output(
+                format!("Successfully created archive {}", outfile),
+                json!({"result": "success", "file": outfile}),
+                &cmd.output.kind,
             )
         },
     )
@@ -369,7 +366,7 @@ pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<String> {
                 Alignment::Left,
             )]));
 
-            format!("{}", table.render())
+            table.render()
         }
     };
 
@@ -408,16 +405,13 @@ pub(crate) fn handle_insert(cmd: InsertCommand) -> Result<String> {
     par.write(&cmd.archive, &issuer, &subject, is_compressed(&buf)?)
         .map_err(convert_error)?;
 
-    Ok(format!(
-        "{}",
-        format_output(
-            format!(
-                "Successfully inserted {} into archive {}",
-                cmd.binary, cmd.archive
-            ),
-            json!({"result": "success", "file": cmd.archive}),
-            &cmd.output.kind,
-        )
+    Ok(format_output(
+        format!(
+            "Successfully inserted {} into archive {}",
+            cmd.binary, cmd.archive
+        ),
+        json!({"result": "success", "file": cmd.archive}),
+        &cmd.output.kind,
     ))
 }
 
