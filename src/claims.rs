@@ -457,7 +457,7 @@ fn generate_operator(operator: OperatorMetadata) -> Result<String, Box<dyn ::std
         self_sign_key.public_key(),
         days_from_now_to_jwt_time(operator.common.not_before_days),
         days_from_now_to_jwt_time(operator.common.expires_in_days),
-        if additional_keys.len() > 0 {
+        if !additional_keys.is_empty() {
             additional_keys.iter().map(|k| k.public_key()).collect()
         } else {
             vec![]
@@ -504,7 +504,7 @@ fn generate_account(account: AccountMetadata) -> Result<String, Box<dyn ::std::e
         subject.public_key(),
         days_from_now_to_jwt_time(account.common.not_before_days),
         days_from_now_to_jwt_time(account.common.expires_in_days),
-        if additional_keys.len() > 0 {
+        if !additional_keys.is_empty() {
             additional_keys.iter().map(|k| k.public_key()).collect()
         } else {
             vec![]
@@ -537,7 +537,7 @@ fn generate_provider(provider: ProviderMetadata) -> Result<String, Box<dyn ::std
         subject.public_key(),
         provider.capid.clone(),
         provider.vendor.clone(),
-        provider.revision.clone(),
+        provider.revision,
         provider.version.clone(),
         HashMap::new(),
         days_from_now_to_jwt_time(provider.common.not_before_days),
@@ -795,7 +795,7 @@ pub(crate) fn render_actor_claims(
 // only actors.
 
 fn token_label(pk: &str) -> String {
-    match pk.chars().nth(0).unwrap() {
+    match pk.chars().next().unwrap() {
         'A' => "Account".to_string(),
         'M' => "Module".to_string(),
         'O' => "Operator".to_string(),

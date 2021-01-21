@@ -162,16 +162,13 @@ pub(crate) async fn handle_pull(cmd: PullCommand) -> Result<String, Box<dyn ::st
         spinner.unwrap().stop();
     }
 
-    Ok(format!(
-        "{}",
-        format_output(
-            format!(
-                "\n{} Successfully pulled and validated {}",
-                SHOWER_EMOJI, outfile
-            ),
-            json!({"result": "success", "file": outfile}),
-            &cmd.output
-        )
+    Ok(format_output(
+        format!(
+            "\n{} Successfully pulled and validated {}",
+            SHOWER_EMOJI, outfile
+        ),
+        json!({"result": "success", "file": outfile}),
+        &cmd.output,
     ))
 }
 
@@ -329,16 +326,13 @@ pub(crate) async fn handle_push(cmd: PushCommand) -> Result<String, Box<dyn ::st
     if spinner.is_some() {
         spinner.unwrap().stop();
     }
-    Ok(format!(
-        "{}",
-        format_output(
-            format!(
-                "\n{} Successfully validated and pushed to {}",
-                SHOWER_EMOJI, cmd.url
-            ),
-            json!({"result": "success", "url": cmd.url}),
-            &cmd.output
-        )
+    Ok(format_output(
+        format!(
+            "\n{} Successfully validated and pushed to {}",
+            SHOWER_EMOJI, cmd.url
+        ),
+        json!({"result": "success", "url": cmd.url}),
+        &cmd.output,
     ))
 }
 

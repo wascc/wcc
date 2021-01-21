@@ -93,7 +93,6 @@ impl fmt::Display for OutputParseErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}",
             "error parsing output type, see help for the list of accepted outputs"
         )
     }

@@ -263,7 +263,7 @@ pub(crate) fn handle_create(cmd: CreateCommand) -> Result<String> {
         {
             format!(
                 "Error writing PAR. Please ensure directory {:?} exists",
-                PathBuf::from(outfile.clone()).parent().unwrap(),
+                PathBuf::from(outfile).parent().unwrap(),
             )
         } else {
             format_output(
@@ -306,7 +306,7 @@ pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<String> {
             } else {
                 "None".to_string()
             };
-            let friendly_ver = metadata.ver.unwrap_or("None".to_string());
+            let friendly_ver = metadata.ver.unwrap_or_else(|| "None".to_string());
             format!(
                 "{}",
                 json!({"name": metadata.name.unwrap(),

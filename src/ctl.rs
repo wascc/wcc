@@ -346,7 +346,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
         }
         Get(GetCommand::Hosts(cmd)) => {
             let output = cmd.output;
-            sp = update_spinner_message(sp, format!(" Retrieving Hosts ..."), &output);
+            sp = update_spinner_message(sp, " Retrieving Hosts ...".to_string(), &output);
             let hosts = get_hosts(cmd).await?;
             debug!(target: WASH_CMD_INFO, "Hosts:{:?}", hosts);
             match output.kind {
@@ -370,7 +370,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
         }
         Get(GetCommand::Claims(cmd)) => {
             let output = cmd.output;
-            sp = update_spinner_message(sp, format!(" Retrieving claims ... "), &output);
+            sp = update_spinner_message(sp, " Retrieving claims ... ".to_string(), &output);
             let claims = get_claims(cmd).await?;
             debug!(target: WASH_CMD_INFO, "Claims:{:?}", claims);
             match output.kind {
@@ -535,7 +535,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
         sp.unwrap().stop()
     }
 
-    Ok(format!("{}", out))
+    Ok(out)
 }
 
 pub(crate) async fn new_ctl_client(
@@ -593,7 +593,7 @@ pub(crate) async fn advertise_link(cmd: LinkCommand) -> Result<()> {
             &cmd.actor_id,
             &cmd.provider_id,
             &cmd.contract_id,
-            &cmd.link_name.unwrap_or("default".to_string()),
+            &cmd.link_name.unwrap_or_else(|| "default".to_string()),
             labels_vec_to_hashmap(cmd.values)?,
         )
         .await
@@ -609,7 +609,7 @@ pub(crate) async fn start_actor(cmd: StartActorCommand) -> Result<StartActorAck>
             let suitable_hosts = client
                 .perform_actor_auction(
                     &cmd.actor_ref,
-                    labels_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
+                    labels_vec_to_hashmap(cmd.constraints.unwrap_or_default())?,
                     Duration::from_secs(cmd.timeout),
                 )
                 .await
@@ -638,7 +638,7 @@ pub(crate) async fn start_provider(cmd: StartProviderCommand) -> Result<StartPro
                 .perform_provider_auction(
                     &cmd.provider_ref,
                     &cmd.link_name,
-                    labels_vec_to_hashmap(cmd.constraints.unwrap_or(vec![]))?,
+                    labels_vec_to_hashmap(cmd.constraints.unwrap_or_default())?,
                     Duration::from_secs(cmd.timeout),
                 )
                 .await
@@ -725,7 +725,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
         Alignment::Center,
     )]));
 
-    if inv.labels.len() >= 1 {
+    if !inv.labels.is_empty() {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "",
             4,
@@ -745,7 +745,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
         )]));
     }
 
-    if inv.actors.len() >= 1 {
+    if !inv.actors.is_empty() {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "",
             4,
@@ -760,7 +760,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
             table.add_row(Row::new(vec![
                 TableCell::new_with_alignment(a.id, 2, Alignment::Left),
                 TableCell::new_with_alignment(
-                    a.image_ref.unwrap_or("N/A".to_string()),
+                    a.image_ref.unwrap_or_else(|| "N/A".to_string()),
                     2,
                     Alignment::Left,
                 ),
@@ -774,7 +774,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
         )]));
     }
 
-    if inv.providers.len() >= 1 {
+    if !inv.providers.is_empty() {
         table.add_row(Row::new(vec![TableCell::new_with_alignment(
             "",
             4,
@@ -791,7 +791,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
                 TableCell::new_with_alignment(p.id, 2, Alignment::Left),
                 TableCell::new_with_alignment(p.link_name, 1, Alignment::Left),
                 TableCell::new_with_alignment(
-                    p.image_ref.unwrap_or("N/A".to_string()),
+                    p.image_ref.unwrap_or_else(|| "N/A".to_string()),
                     1,
                     Alignment::Left,
                 ),
