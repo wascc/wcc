@@ -1,4 +1,4 @@
-use crate::util::{format_output, Output, OutputKind};
+use crate::util::{format_output, print_or_log, Output, OutputKind};
 use nkeys::{KeyPair, KeyPairType};
 use serde_json::json;
 use std::env;
@@ -13,6 +13,12 @@ use structopt::StructOpt;
 pub(crate) struct KeysCli {
     #[structopt(flatten)]
     command: KeysCliCommand,
+}
+
+impl KeysCli {
+    pub(crate) fn command(self) -> KeysCliCommand {
+        self.command
+    }
 }
 
 #[derive(Debug, Clone, StructOpt)]
@@ -55,8 +61,10 @@ pub(crate) enum KeysCliCommand {
     },
 }
 
-pub(crate) fn handle_command(cli: KeysCli) -> Result<(), Box<dyn ::std::error::Error>> {
-    let output = match cli.command {
+pub(crate) fn handle_command(
+    command: KeysCliCommand,
+) -> Result<String, Box<dyn ::std::error::Error>> {
+    match command {
         KeysCliCommand::GenCommand { keytype, output } => Ok(generate(&keytype, &output.kind)),
         KeysCliCommand::GetCommand {
             keyname,
@@ -64,12 +72,7 @@ pub(crate) fn handle_command(cli: KeysCli) -> Result<(), Box<dyn ::std::error::E
             output,
         } => get(&keyname, directory, &output),
         KeysCliCommand::ListCommand { directory, output } => list(directory, &output),
-    };
-    match output {
-        Ok(r) => println!("{}", r),
-        Err(e) => println!("Error: {}", e),
     }
-    Ok(())
 }
 
 /// Generates a keypair of the specified KeyPairType, as either Text or JSON
@@ -94,50 +97,40 @@ pub(crate) fn get(
     keyname: &String,
     directory: Option<String>,
     output: &Output,
-) -> Result<String, Error> {
+) -> Result<String, Box<dyn ::std::error::Error>> {
     let dir = determine_directory(directory)?;
-    let mut f = match File::open(format!("{}/{}", dir, keyname)) {
-        Ok(f) => f,
-        Err(f) => {
-            return Err(Error::new(
-                f.kind(),
-                format!("{}.\nPlease ensure {}/{} exists.", f, dir, keyname),
-            ));
-        }
-    };
+    let mut f = File::open(format!("{}/{}", dir, keyname))
+        .map_err(|e| format!("{}.\nPlease ensure {}/{} exists.", e, dir, keyname))?;
+
     let mut s = String::new();
     let res = match f.read_to_string(&mut s) {
         Ok(_) => Ok(s),
         Err(e) => Err(e),
     };
     match res {
-        Err(e) => Err(e),
+        Err(e) => Err(e.into()),
         Ok(s) => Ok(format!(
             "{}",
-            format_output(s.clone(), json!({ "seed": s }), &output.kind)
+            format_output(s.clone(), json!({ "seed": s }), output)
         )),
     }
 }
 
 /// Lists all keypairs (file extension .nk) in a specified directory or $WASH_KEYS($HOME/.wash/keys) if directory is not specified
-pub(crate) fn list(directory: Option<String>, output: &Output) -> Result<String, Error> {
+pub(crate) fn list(
+    directory: Option<String>,
+    output: &Output,
+) -> Result<String, Box<dyn ::std::error::Error>> {
     let dir = determine_directory(directory)?;
 
     let mut keys = vec![];
-    match fs::read_dir(dir.clone()) {
-        Err(e) => {
-            return Err(Error::new(
-                e.kind(),
-                format!("Error: {}, please ensure directory {} exists", e, dir),
-            ))
-        }
-        Ok(paths) => {
-            for path in paths {
-                let f = String::from(path.unwrap().file_name().to_str().unwrap());
-                if f.ends_with(".nk") {
-                    keys.push(f);
-                }
-            }
+    let paths = fs::read_dir(dir.clone())
+        .map_err(|e| format!("Error: {}, please ensure directory {} exists", e, dir))?;
+
+    for path in paths {
+        let f = String::from(path.unwrap().file_name().to_str().unwrap());
+        if f.ends_with(".nk") {
+            keys.push(f);
         }
     }
 
@@ -161,6 +154,7 @@ fn determine_directory(directory: Option<String>) -> Result<String, Error> {
 }
 
 /// Helper function to locate and extract keypair from user input
+/// Returns a tuple of the keypair and optional autogenerate message
 pub(crate) fn extract_keypair(
     input: Option<String>,
     module_path: Option<String>,
@@ -207,8 +201,18 @@ pub(crate) fn extract_keypair(
             }
             // No default key, generating for user
             Err(_e) if !disable_keygen => {
+                print_or_log(crate::util::format_output(
+                    format!(
+                        "No keypair found in \"{}\".
+We will generate one for you and place it there.
+If you'd like to use alternative keys, you can supply them as a flag.\n",
+                        path
+                    ),
+                    json!({"status": "No keypair found", "path": path, "keygen": "true"}),
+                    &Output::default(),
+                ));
+
                 let kp = KeyPair::new(keygen_type);
-                println!("No keypair found in \"{}\".\nWe will generate one for you and place it there.\nIf you'd like to use alternative keys, you can supply them as a flag.\n", path);
                 let seed = kp.seed()?;
                 fs::create_dir_all(Path::new(&path).parent().unwrap())?;
                 let mut f = File::create(path)?;

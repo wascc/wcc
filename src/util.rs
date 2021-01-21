@@ -1,3 +1,4 @@
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
@@ -6,6 +7,11 @@ use std::str::FromStr;
 use structopt::StructOpt;
 
 pub(crate) type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
+
+/// Environment variable to show when user is in REPL mode
+pub(crate) const REPL_MODE: &str = "WASH_REPL_MODE";
+pub(crate) const WASH_LOG_INFO: &str = "WASH_LOG";
+pub(crate) const WASH_CMD_INFO: &str = "WASH_CMD";
 
 #[derive(StructOpt, Debug, Copy, Clone, Deserialize, Serialize)]
 pub(crate) struct Output {
@@ -18,10 +24,26 @@ pub(crate) struct Output {
     pub(crate) kind: OutputKind,
 }
 
+/// Used for displaying human-readable output vs JSON format
 #[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize)]
 pub(crate) enum OutputKind {
     Text,
     JSON,
+}
+
+/// Used to supress `println!` macro calls in the REPL
+#[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize)]
+pub(crate) enum OutputDestination {
+    CLI,
+    REPL,
+}
+
+impl Default for Output {
+    fn default() -> Self {
+        Output {
+            kind: OutputKind::Text,
+        }
+    }
 }
 
 impl FromStr for OutputKind {
@@ -46,6 +68,22 @@ impl PartialEq for OutputKind {
     }
 }
 
+impl Default for OutputDestination {
+    fn default() -> OutputDestination {
+        OutputDestination::CLI
+    }
+}
+
+impl PartialEq for OutputDestination {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (OutputDestination::CLI, OutputDestination::CLI) => true,
+            (OutputDestination::REPL, OutputDestination::REPL) => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OutputParseErr;
 
@@ -62,12 +100,8 @@ impl fmt::Display for OutputParseErr {
 }
 
 /// Returns string output for provided output kind
-pub(crate) fn format_output(
-    text: String,
-    json: serde_json::Value,
-    output_kind: &OutputKind,
-) -> String {
-    match output_kind {
+pub(crate) fn format_output(text: String, json: serde_json::Value, output: &Output) -> String {
+    match output.kind {
         OutputKind::Text => text,
         OutputKind::JSON => format!("{}", json),
     }
@@ -101,4 +135,20 @@ pub(crate) fn json_str_to_msgpack_bytes(payload: Vec<String>) -> Result<Vec<u8>>
     let json: serde_json::value::Value = serde_json::from_str(&payload.join(""))?;
     let payload = serdeconv::to_msgpack_vec(&json)?;
     Ok(payload)
+}
+
+/// Helper function to either display input to stdout or log the output in the REPL
+pub(crate) fn print_or_log(output: String) {
+    match output_destination() {
+        OutputDestination::REPL => info!(target: WASH_LOG_INFO, "{}", output),
+        OutputDestination::CLI => println!("{}", output),
+    }
+}
+
+/// Helper function to retrieve REPL_MODE environment variable to determine output destination
+pub(crate) fn output_destination() -> OutputDestination {
+    match std::env::var(REPL_MODE) {
+        Ok(_) => OutputDestination::REPL,
+        Err(_) => OutputDestination::CLI,
+    }
 }

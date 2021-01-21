@@ -21,6 +21,12 @@ pub(crate) struct ParCli {
     command: ParCliCommand,
 }
 
+impl ParCli {
+    pub(crate) fn command(self) -> ParCliCommand {
+        self.command
+    }
+}
+
 #[derive(Debug, Clone, StructOpt)]
 pub(crate) enum ParCliCommand {
     /// Build a provider archive file
@@ -196,14 +202,12 @@ pub(crate) struct InsertCommand {
     pub(crate) output: Output,
 }
 
-pub(crate) async fn handle_command(cli: ParCli) -> Result<()> {
-    let output = match cli.command {
+pub(crate) async fn handle_command(command: ParCliCommand) -> Result<String> {
+    match command {
         ParCliCommand::Create(cmd) => handle_create(cmd),
         ParCliCommand::Inspect(cmd) => handle_inspect(cmd).await,
         ParCliCommand::Insert(cmd) => handle_insert(cmd),
-    }?;
-    println!("{}", output);
-    Ok(())
+    }
 }
 
 /// Creates a provider archive using an initial architecture target, provider, and signing keys
@@ -265,13 +269,13 @@ pub(crate) fn handle_create(cmd: CreateCommand) -> Result<String> {
             format_output(
                 format!("Successfully created archive {}", outfile),
                 json!({"result": "success", "file": outfile}),
-                &cmd.output.kind,
+                &cmd.output,
             )
         },
     )
 }
 
-/// Loads a provider archive and prints the contents of the claims
+/// Loads a provider archive and outputs the contents of the claims
 pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<String> {
     let archive = match File::open(&cmd.archive) {
         Ok(mut f) => {
@@ -413,7 +417,7 @@ pub(crate) fn handle_insert(cmd: InsertCommand) -> Result<String> {
             cmd.binary, cmd.archive
         ),
         json!({"result": "success", "file": cmd.archive}),
-        &cmd.output.kind,
+        &cmd.output,
     ))
 }
 
