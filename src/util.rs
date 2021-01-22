@@ -1,4 +1,5 @@
 use log::info;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
@@ -9,7 +10,8 @@ use structopt::StructOpt;
 pub(crate) type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
 /// Environment variable to show when user is in REPL mode
-pub(crate) const REPL_MODE: &str = "WASH_REPL_MODE";
+pub(crate) static REPL_MODE: OnceCell<String> = OnceCell::new();
+
 pub(crate) const WASH_LOG_INFO: &str = "WASH_LOG";
 pub(crate) const WASH_CMD_INFO: &str = "WASH_CMD";
 
@@ -146,8 +148,9 @@ pub(crate) fn print_or_log(output: String) {
 
 /// Helper function to retrieve REPL_MODE environment variable to determine output destination
 pub(crate) fn output_destination() -> OutputDestination {
-    match std::env::var(REPL_MODE) {
-        Ok(_) => OutputDestination::REPL,
-        Err(_) => OutputDestination::CLI,
+    // REPL_MODE is Some("true") when in REPL, otherwise CLI
+    match REPL_MODE.get() {
+        Some(_) => OutputDestination::REPL,
+        None => OutputDestination::CLI,
     }
 }

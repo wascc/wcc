@@ -395,9 +395,9 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     init_logger(filter).unwrap();
     set_default_level(filter);
 
-    // Set environment variable to show we're in REPL mode
-    // This ensures the rest of the modules can avoid `println!` macro calls
-    std::env::set_var(crate::util::REPL_MODE, "true");
+    // Set global variable to show we're in REPL mode
+    // This ensures the rest of the modules can properly format output information
+    crate::util::REPL_MODE.set("true".to_string()).unwrap();
 
     // Initialize terminal
     let backend = {

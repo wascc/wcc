@@ -420,7 +420,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
             );
             match start_actor(cmd).await {
                 Ok(r) => format_output(
-                    format!("Actor {} being scheduled on host {}", r.actor_id, r.host_id),
+                    format!("Actor starting on host {}", r.host_id),
                     json!({ "ack": r }),
                     &output,
                 ),
@@ -444,10 +444,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
             );
             match start_provider(cmd).await {
                 Ok(r) => format_output(
-                    format!(
-                        "Provider {} being scheduled on host {}",
-                        r.provider_id, r.host_id
-                    ),
+                    format!("Provider starting on host {}", r.host_id),
                     json!({ "ack": r }),
                     &output,
                 ),
