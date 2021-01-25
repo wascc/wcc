@@ -27,14 +27,14 @@ pub(crate) struct Output {
 }
 
 /// Used for displaying human-readable output vs JSON format
-#[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputKind {
     Text,
     JSON,
 }
 
 /// Used to supress `println!` macro calls in the REPL
-#[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputDestination {
     CLI,
     REPL,
@@ -56,32 +56,6 @@ impl FromStr for OutputKind {
             "json" => Ok(OutputKind::JSON),
             "text" => Ok(OutputKind::Text),
             _ => Err(OutputParseErr),
-        }
-    }
-}
-
-impl PartialEq for OutputKind {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (OutputKind::JSON, OutputKind::JSON) => true,
-            (OutputKind::Text, OutputKind::Text) => true,
-            _ => false,
-        }
-    }
-}
-
-impl Default for OutputDestination {
-    fn default() -> OutputDestination {
-        OutputDestination::CLI
-    }
-}
-
-impl PartialEq for OutputDestination {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (OutputDestination::CLI, OutputDestination::CLI) => true,
-            (OutputDestination::REPL, OutputDestination::REPL) => true,
-            _ => false,
         }
     }
 }
