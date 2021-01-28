@@ -335,7 +335,6 @@ impl WashRepl {
                             }
                             ReplCliCommand::Claims(claimscmd) => {
                                 let output_state = Arc::clone(&self.output_state);
-                                //let output_state = Arc::clone(Arc::clone(&self.output_state));
                                 std::thread::spawn(|| {
                                     let mut rt = actix_rt::System::new("cmd");
                                     rt.block_on(async {
