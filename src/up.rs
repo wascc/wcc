@@ -8,8 +8,7 @@ use crossterm::event::{poll, read, DisableMouseCapture, Event, KeyCode, KeyEvent
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use log::{error, info, LevelFilter};
 use std::io::{self, Stdout};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{atomic::AtomicUsize, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::{cell::RefCell, io::Write, rc::Rc};
 use structopt::{clap::AppSettings, StructOpt};
 use tui::{
