@@ -18,8 +18,8 @@ structopt = "0.3.18"
 serde_json = { version = "1.0.60", features = ["raw_value"] }
 serde = { version = "1.0.117", features = ["derive"] }
 serdeconv = "0.4.0"
-tui-logger =  { version = "0.4.8", default-features = false, features = ["tui-crossterm"] }
-tui = { version = "0.12.0", default-features = false, features = ["crossterm"] }
+tui-logger =  { version = "0.4.9", default-features = false, features = ["tui-crossterm"] }
+tui = { version = "0.14.0", default-features = false, features = ["crossterm"] }
 log = "0.4.11"
 crossterm = "0.18.2"
 actix-rt = "1.1.1"
