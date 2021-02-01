@@ -55,7 +55,7 @@ then
 	echo ""
 	echo "Actors and providers linked and starting, try running one of the following commands to test your KVCounter!"
 	echo "curl localhost:8080/mycounter
-	wash ctl call MCFMFDWFHGKELOXPCNCDXKK5OFLHBVEWRAOXR5JSQUD2TOFRE3DFPM7E HandleRequest '{"method": "GET", "path": "/mycounter", "body": "", "queryString":"", "header":{}}'"
+wash ctl call MCFMFDWFHGKELOXPCNCDXKK5OFLHBVEWRAOXR5JSQUD2TOFRE3DFPM7E HandleRequest '{"method": "GET", "path": "/mycounter", "body": "", "queryString":"", "header":{}}'"
 else
 	echo "No hosts found, please run the wasmcloud binary, or proceed with the following commands in the REPL:"
 	echo ""
