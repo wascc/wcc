@@ -62,7 +62,7 @@ pub(crate) fn handle_command(cmd: DrainCliCommand) -> Result<String, Box<dyn ::s
         cleared.push(remove_dir_contents(path)?);
     }
     Ok(match cmd.output.kind {
-        OutputKind::Text => format!("Successfully cleard cahces at: {:?}", cleared),
+        OutputKind::Text => format!("Successfully cleared caches at: {:?}", cleared),
         OutputKind::JSON => json!({ "drained": cleared }).to_string(),
     })
 }
