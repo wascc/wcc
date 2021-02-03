@@ -26,6 +26,18 @@ pub(crate) struct Output {
     pub(crate) kind: OutputKind,
 }
 
+#[derive(StructOpt, Debug, Copy, Clone, Deserialize, Serialize)]
+pub(crate) struct GlobalOutput {
+    #[structopt(
+        short = "o",
+        long = "output",
+        default_value = "text",
+        help = "Specify output format (text or json)",
+        global = true
+    )]
+    pub(crate) kind: OutputKind,
+}
+
 /// Used for displaying human-readable output vs JSON format
 #[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputKind {

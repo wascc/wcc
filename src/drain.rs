@@ -1,5 +1,4 @@
-use crate::util::{Output, OutputKind};
-use fs::remove_file;
+use crate::util::{GlobalOutput, Output, OutputKind};
 use serde_json::json;
 use std::env;
 use std::path::Path;
@@ -21,9 +20,9 @@ impl DrainCli {
 #[derive(StructOpt, Debug, Clone)]
 pub(crate) struct DrainCliCommand {
     #[structopt(flatten)]
-    output: Output,
-    #[structopt(flatten)]
     selection: DrainSelection,
+    #[structopt(flatten)]
+    output: GlobalOutput,
 }
 
 impl IntoIterator for DrainSelection {
