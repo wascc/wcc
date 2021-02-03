@@ -4,7 +4,7 @@ use structopt::StructOpt;
 mod drain;
 use drain::DrainCli;
 mod claims;
-use claims::{handle_command, ClaimsCli};
+use claims::ClaimsCli;
 mod ctl;
 use ctl::CtlCli;
 mod keys;

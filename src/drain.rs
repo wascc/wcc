@@ -1,4 +1,4 @@
-use crate::util::{GlobalOutput, Output, OutputKind};
+use crate::util::{GlobalOutput, OutputKind};
 use serde_json::json;
 use std::env;
 use std::path::Path;
