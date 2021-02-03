@@ -25,6 +25,19 @@ pub(crate) struct DrainCliCommand {
     output: GlobalOutput,
 }
 
+#[derive(StructOpt, Debug, Clone)]
+pub(crate) enum DrainSelection {
+    /// TODO
+    #[structopt(name = "all")]
+    All,
+    /// TODO
+    #[structopt(name = "oci")]
+    Oci,
+    /// TODO
+    #[structopt(name = "lib")]
+    Lib,
+}
+
 impl IntoIterator for DrainSelection {
     type Item = PathBuf;
     type IntoIter = std::vec::IntoIter<Self::Item>;
@@ -40,19 +53,6 @@ impl IntoIterator for DrainSelection {
         };
         paths.into_iter()
     }
-}
-
-#[derive(StructOpt, Debug, Clone)]
-pub(crate) enum DrainSelection {
-    /// TODO
-    #[structopt(name = "all")]
-    All,
-    /// TODO
-    #[structopt(name = "oci")]
-    Oci,
-    /// TODO
-    #[structopt(name = "lib")]
-    Lib,
 }
 
 pub(crate) fn handle_command(cmd: DrainCliCommand) -> Result<String, Box<dyn ::std::error::Error>> {
