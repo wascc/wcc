@@ -1,4 +1,5 @@
 use crate::util::{Output, OutputKind};
+use fs::remove_file;
 use serde_json::json;
 use std::env;
 use std::path::Path;
@@ -69,7 +70,12 @@ pub(crate) fn handle_command(cmd: DrainCliCommand) -> Result<String, Box<dyn ::s
 
 fn remove_dir_contents<P: AsRef<Path>>(path: P) -> Result<String, Box<dyn ::std::error::Error>> {
     for entry in fs::read_dir(&path)? {
-        fs::remove_dir_all(entry?.path())?;
+        let path = entry?.path();
+        if path.is_dir() {
+            fs::remove_dir_all(path)?;
+        } else if path.is_file() {
+            fs::remove_file(path)?;
+        }
     }
     Ok(format!("{}", path.as_ref().display()))
 }
