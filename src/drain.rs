@@ -1,4 +1,4 @@
-use crate::util::{GlobalOutput, OutputKind};
+use crate::util::{Output, OutputKind};
 use serde_json::json;
 use std::env;
 use std::path::Path;
@@ -19,52 +19,64 @@ impl DrainCli {
 
 #[derive(StructOpt, Debug, Clone)]
 pub(crate) struct DrainCliCommand {
-    #[structopt(flatten)]
+    #[structopt(subcommand)]
     selection: DrainSelection,
-    #[structopt(flatten)]
-    output: GlobalOutput,
+}
+
+// Hack to get around the fact that we can't have a global 'output' arg.
+impl DrainCliCommand {
+    fn output_kind(&self) -> OutputKind {
+        match self.selection {
+            DrainSelection::All(output)
+            | DrainSelection::Lib(output)
+            | DrainSelection::Oci(output) => output.kind,
+        }
+    }
 }
 
 #[derive(StructOpt, Debug, Clone)]
 pub(crate) enum DrainSelection {
     /// TODO
-    #[structopt(name = "all")]
-    All,
+    All(Output),
     /// TODO
-    #[structopt(name = "oci")]
-    Oci,
+    Oci(Output),
     /// TODO
-    #[structopt(name = "lib")]
-    Lib,
+    Lib(Output),
 }
 
-impl IntoIterator for DrainSelection {
+impl IntoIterator for &DrainSelection {
     type Item = PathBuf;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         let paths = match self {
-            DrainSelection::All => vec![
+            DrainSelection::All(_) => vec![
                 env::temp_dir().join("wasmcloudcache"),
                 env::temp_dir().join("wasmcloud_ocicache"),
             ],
-            DrainSelection::Oci => vec![env::temp_dir().join("wasmcloud_ocicache")],
-            DrainSelection::Lib => vec![env::temp_dir().join("wasmcloudcache")],
+            DrainSelection::Oci(_) => vec![env::temp_dir().join("wasmcloud_ocicache")],
+            DrainSelection::Lib(_) => vec![env::temp_dir().join("wasmcloudcache")],
         };
         paths.into_iter()
     }
 }
 
-pub(crate) fn handle_command(cmd: DrainCliCommand) -> Result<String, Box<dyn ::std::error::Error>> {
-    let to_clear = cmd.selection.into_iter();
-    let mut cleared = vec![];
-    for path in to_clear {
-        cleared.push(remove_dir_contents(path)?);
+impl DrainCliCommand {
+    fn drain(&self) -> Result<String, Box<dyn ::std::error::Error>> {
+        let to_clear = self.selection.into_iter();
+        let mut cleared = vec![];
+        for path in to_clear {
+            cleared.push(remove_dir_contents(path)?);
+        }
+        Ok(match self.output_kind() {
+            OutputKind::Text => format!("Successfully cleared caches at: {:?}", cleared),
+            OutputKind::JSON => json!({ "drained": cleared }).to_string(),
+        })
     }
-    Ok(match cmd.output.kind {
-        OutputKind::Text => format!("Successfully cleared caches at: {:?}", cleared),
-        OutputKind::JSON => json!({ "drained": cleared }).to_string(),
-    })
+}
+
+pub(crate) fn handle_command(cmd: DrainCliCommand) -> Result<String, Box<dyn ::std::error::Error>> {
+    cmd.drain()
 }
 
 fn remove_dir_contents<P: AsRef<Path>>(path: P) -> Result<String, Box<dyn ::std::error::Error>> {
