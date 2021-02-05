@@ -25,6 +25,7 @@ pub(crate) struct Output {
     )]
     pub(crate) kind: OutputKind,
 }
+
 /// Used for displaying human-readable output vs JSON format
 #[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputKind {
