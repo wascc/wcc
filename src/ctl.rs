@@ -51,11 +51,11 @@ pub(crate) struct ConnectionOpts {
     #[structopt(short = "n", long = "ns-prefix", default_value = "default")]
     ns_prefix: String,
 
-    /// Timeout length for RPC, defaults to 5 seconds
+    /// Timeout length for RPC, defaults to 1 second
     #[structopt(
         short = "t",
         long = "rpc-timeout",
-        default_value = "5",
+        default_value = "1",
         env = "WASH_RPC_TIMEOUT"
     )]
     rpc_timeout: u64,
@@ -190,7 +190,7 @@ pub(crate) struct GetHostsCommand {
     #[structopt(flatten)]
     pub(crate) output: Output,
 
-    #[structopt(long = "timeout", default_value = "2")]
+    #[structopt(long = "timeout", default_value = "1")]
     timeout: u64,
 }
 
@@ -236,7 +236,8 @@ pub(crate) struct StartActorCommand {
     #[structopt(short = "c", long = "constraint", name = "constraints")]
     constraints: Option<Vec<String>>,
 
-    #[structopt(long = "timeout", default_value = "2")]
+    /// Timeout to wait for actor start acknowledgement, defaults to 1 second
+    #[structopt(long = "timeout", default_value = "1")]
     timeout: u64,
 }
 
@@ -264,7 +265,8 @@ pub(crate) struct StartProviderCommand {
     #[structopt(short = "c", long = "constraint", name = "constraints")]
     constraints: Option<Vec<String>>,
 
-    #[structopt(long = "timeout", default_value = "5")]
+    /// Timeout to wait for provider start acknowledgement, defaults to 1 second
+    #[structopt(long = "timeout", default_value = "1")]
     timeout: u64,
 }
 
