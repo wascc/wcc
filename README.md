@@ -16,7 +16,7 @@
 
 ## Installing wash
 ```
-cargo install --git https://github.com/wasmcloud/wash --tag v0.1.17
+cargo install --git https://github.com/wasmcloud/wash --tag v0.1.18
 ```
 
 ## Using wash
@@ -35,4 +35,4 @@ Push and Pull actors and capability providers to/from OCI compliant registries. 
 Launch a fully interactive wasmCloud REPL environment, where all of the above subcommands are available to you. `Up` provides you with a wasmCloud host, so you can get started running actors and providers without ever touching a line of code.
 
 ## Contributing to wash
-If you have any feature suggestions, find any bugs, or otherwise have a question, please open up an issue using Github. Forking & submitting Pull Requests are welcome, and the issues marked as "good first issue" are great places to start if you're looking to contribute.
+If you have any feature suggestions, find any bugs, or otherwise have a question, please submit an issue [here](https://github.com/wasmCloud/wash/issues/new). Forking & submitting Pull Requests are welcome, and the [good first issue](https://github.com/wasmCloud/wash/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) label is a great way to find a place to start if you're looking to contribute.
