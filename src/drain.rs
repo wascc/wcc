@@ -23,7 +23,7 @@ pub(crate) struct DrainCliCommand {
     selection: DrainSelection,
 }
 
-// Hack to get around the fact that we can't have a global 'output' arg.
+// Propagates output selection from CLI to all commands
 impl DrainCliCommand {
     fn output_kind(&self) -> OutputKind {
         match self.selection {
@@ -36,11 +36,11 @@ impl DrainCliCommand {
 
 #[derive(StructOpt, Debug, Clone)]
 pub(crate) enum DrainSelection {
-    /// TODO
+    /// Remove all cached files created by wasmCloud
     All(Output),
-    /// TODO
+    /// Remove cached files downloaded from OCI registries by wasmCloud
     Oci(Output),
-    /// TODO
+    /// Remove cached binaries extracted from provider archives
     Lib(Output),
 }
 

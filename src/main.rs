@@ -40,7 +40,7 @@ struct Cli {
 
 #[derive(Debug, Clone, StructOpt)]
 enum CliCommand {
-    /// TODO
+    /// Manage contents of local wasmCloud cache
     #[structopt(name = "drain")]
     Drain(DrainCli),
     /// Generate and manage JWTs for wasmCloud Actors

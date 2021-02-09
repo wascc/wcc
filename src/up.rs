@@ -105,7 +105,7 @@ struct ReplCli {
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(global_settings(&[AppSettings::ColorNever, AppSettings::DisableVersion, AppSettings::VersionlessSubcommands]))]
 enum ReplCliCommand {
-    // TODO
+    // Manage contents of local wasmCloud cache
     #[structopt(name = "drain")]
     Drain(DrainCliCommand),
 
