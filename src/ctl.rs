@@ -1,9 +1,9 @@
-extern crate control_interface;
+extern crate wasmcloud_control_interface;
 use crate::util::{
     convert_error, format_output, json_str_to_msgpack_bytes, labels_vec_to_hashmap,
     output_destination, Output, OutputDestination, OutputKind, Result, WASH_CMD_INFO,
 };
-use control_interface::*;
+use wasmcloud_control_interface::*;
 use log::debug;
 use serde_json::json;
 use spinners::{Spinner, Spinners};
