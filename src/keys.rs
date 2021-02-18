@@ -247,9 +247,13 @@ fn keypair_type_to_string(keypair_type: KeyPairType) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate, OutputKind};
+    use super::{generate, handle_command, KeysCli, KeysCliCommand, OutputKind};
     use nkeys::KeyPairType;
     use serde::Deserialize;
+    use std::env::temp_dir;
+    use std::fs::{create_dir_all, remove_dir_all, File};
+    use std::io::prelude::*;
+    use structopt::StructOpt;
 
     #[test]
     fn keys_generate_basic_test() {
@@ -344,5 +348,168 @@ mod tests {
         assert_eq!(cluster_keypair.public_key.len(), sample_public_key.len());
         assert_eq!(cluster_keypair.seed.starts_with("SC"), true);
         assert_eq!(cluster_keypair.seed.len(), sample_seed.len());
+    }
+
+    #[test]
+    /// Enumerates multiple options of the `gen` command to ensure API doesn't
+    /// change between versions. This test will fail if `wash keys gen <type>`
+    /// changes syntax, ordering of required elements, or flags.
+    fn gen_enumerate() {
+        let key_gen_types = vec![
+            "account", "user", "module", "service", "server", "operator", "cluster",
+        ];
+
+        key_gen_types.iter().for_each(|cmd| {
+            let gen_cmd = KeysCli::from_iter(&["keys", "gen", cmd]);
+            match gen_cmd.command.clone() {
+                KeysCliCommand::GenCommand { keytype, output } => {
+                    use KeyPairType::*;
+                    match keytype {
+                        Account => assert_eq!(*cmd, "account"),
+                        User => assert_eq!(*cmd, "user"),
+                        Module => assert_eq!(*cmd, "module"),
+                        Service => assert_eq!(*cmd, "service"),
+                        Server => assert_eq!(*cmd, "server"),
+                        Operator => assert_eq!(*cmd, "operator"),
+                        Cluster => assert_eq!(*cmd, "cluster"),
+                    }
+                    assert_eq!(output.kind, OutputKind::Text);
+                }
+                _ => panic!("`keys gen` constructed incorrect command"),
+            };
+            assert!(handle_command(gen_cmd.command).is_ok());
+        });
+
+        key_gen_types.iter().for_each(|cmd| {
+            let gen_cmd = KeysCli::from_iter(&["keys", "gen", cmd, "-o", "json"]);
+            match gen_cmd.command.clone() {
+                KeysCliCommand::GenCommand { keytype, output } => {
+                    use KeyPairType::*;
+                    match keytype {
+                        Account => assert_eq!(*cmd, "account"),
+                        User => assert_eq!(*cmd, "user"),
+                        Module => assert_eq!(*cmd, "module"),
+                        Service => assert_eq!(*cmd, "service"),
+                        Server => assert_eq!(*cmd, "server"),
+                        Operator => assert_eq!(*cmd, "operator"),
+                        Cluster => assert_eq!(*cmd, "cluster"),
+                    }
+                    assert_eq!(output.kind, OutputKind::JSON);
+                }
+                _ => panic!("`keys gen` constructed incorrect command"),
+            };
+            assert!(handle_command(gen_cmd.command).is_ok());
+        });
+    }
+
+    #[test]
+    /// Enumerates multiple options of the `get` command to ensure API doesn't
+    /// change between versions. This test will fail if `wash keys get`
+    /// changes syntax, ordering of required elements, or flags.
+    fn get_enumerate() {
+        const KEYNAME: &str = "getenumerate_test_mykey.nk";
+        let path = temp_dir();
+        let path = path.join("washgettest");
+        create_dir_all(path.clone()).unwrap();
+        let keysdir: &str = &format!("{}", path.to_str().unwrap());
+
+        let keypath = path.join(KEYNAME);
+
+        let mut file = File::create(keypath).unwrap();
+        file.write_all(b"SMAGCRMDVSCIK5TGBAESKJUTWNJKCPXWJK5FQXQZ2POTYWA3JSS63HILFU")
+            .unwrap();
+
+        let get_basic = KeysCli::from_iter(&["keys", "get", KEYNAME]);
+        let get_with_directory = KeysCli::from_iter(&["keys", "get", KEYNAME, "-d", keysdir]);
+        let get_all_flags =
+            KeysCli::from_iter(&["keys", "get", KEYNAME, "-d", keysdir, "-o", "json"]);
+
+        match get_basic.command.clone() {
+            KeysCliCommand::GetCommand { keyname, .. } => assert_eq!(keyname, KEYNAME),
+            other_cmd => panic!("keys get generated other command {:?}", other_cmd),
+        }
+        // key should not be found
+        assert!(handle_command(get_basic.command).is_err());
+
+        match get_with_directory.command.clone() {
+            KeysCliCommand::GetCommand {
+                keyname, directory, ..
+            } => {
+                assert_eq!(keyname, KEYNAME);
+                assert_eq!(directory, Some(keysdir.to_string()));
+            }
+            other_cmd => panic!("keys get generated other command {:?}", other_cmd),
+        }
+        assert!(handle_command(get_with_directory.command).is_ok());
+
+        match get_all_flags.command.clone() {
+            KeysCliCommand::GetCommand {
+                keyname,
+                directory,
+                output,
+            } => {
+                assert_eq!(keyname, KEYNAME);
+                assert_eq!(directory, Some(keysdir.to_string()));
+                assert_eq!(output.kind, OutputKind::JSON);
+            }
+            other_cmd => panic!("keys get generated other command {:?}", other_cmd),
+        }
+        assert!(handle_command(get_all_flags.command).is_ok());
+
+        remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    /// Enumerates multiple options of the `list` command to ensure API doesn't
+    /// change between versions. This test will fail if `wash keys list`
+    /// changes syntax, ordering of required elements, or flags.
+    fn list_enumerate() {
+        const KEYONE: &str = "listenumerate_test_keyone.nk";
+        const KEYTWO: &str = "listenumerate_test_keytwo.nk";
+        const KEYTHREE: &str = "listenumerate_test_keythree.nk";
+
+        let path = temp_dir();
+        let path = path.join("washlisttest");
+        create_dir_all(path.clone()).unwrap();
+        let keysdir: &str = &format!("{}", path.to_str().unwrap());
+
+        let keyonepath = path.join(KEYONE);
+        let keytwopath = path.join(KEYTWO);
+        let keythreepath = path.join(KEYTHREE);
+
+        let mut file = File::create(keyonepath).unwrap();
+        file.write_all(b"SMAGCRMDVSKKZ5TGBAESKJUTWNJKCPXWJK5FQXQZ2POTYWA3JSS63HILFU")
+            .unwrap();
+        let mut file = File::create(keytwopath).unwrap();
+        file.write_all(b"SAAC7EPG6O34VAXTYHWAD2KAX6FVG6L5MHJ7SWK3FSLVYPN2IPB2XRJKQI")
+            .unwrap();
+        let mut file = File::create(keythreepath).unwrap();
+        file.write_all(b"SUAJEXUECP5MND6DYA7UEL4K4AUI46TOXFTKID3DQF5ZDJB5JWMY4LWIHU")
+            .unwrap();
+
+        let list_basic = KeysCli::from_iter(&["keys", "list"]);
+        let list_all_flags = KeysCli::from_iter(&["keys", "list", "-d", keysdir, "-o", "json"]);
+
+        match list_basic.command.clone() {
+            KeysCliCommand::ListCommand { .. } => (),
+            other_cmd => panic!("keys get generated other command {:?}", other_cmd),
+        }
+        assert!(handle_command(list_basic.command).is_ok());
+
+        match list_all_flags.command.clone() {
+            KeysCliCommand::ListCommand { directory, output } => {
+                assert_eq!(directory, Some(keysdir.to_string()));
+                assert_eq!(output.kind, OutputKind::JSON);
+            }
+            other_cmd => panic!("keys get generated other command {:?}", other_cmd),
+        }
+        let list_res = handle_command(list_all_flags.command);
+        assert!(list_res.is_ok());
+        let keys = list_res.unwrap();
+        assert!(keys.contains(KEYONE));
+        assert!(keys.contains(KEYTWO));
+        assert!(keys.contains(KEYTHREE));
+
+        remove_dir_all(path).unwrap();
     }
 }
