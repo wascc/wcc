@@ -5,14 +5,14 @@ use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
 use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
-use log::{error, info, LevelFilter};
+use log::{error, info, warn, LevelFilter};
 use std::io;
 use std::sync::{Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
 use termion::event::{Event, Key};
 use termion::{
-    input::{MouseTerminal, TermRead},
-    raw::IntoRawMode,
+    input::TermRead,
+    raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
 use tui::{
@@ -26,11 +26,8 @@ use tui::{
 use tui_logger::*;
 use wasmcloud_host::HostBuilder;
 
-type REPLTermionBackend = tui::backend::TermionBackend<
-    termion::screen::AlternateScreen<
-        termion::input::MouseTerminal<termion::raw::RawTerminal<std::io::Stdout>>,
-    >,
->;
+type REPLTermionBackend =
+    tui::backend::TermionBackend<AlternateScreen<RawTerminal<std::io::Stdout>>>;
 
 const CTL_NS: &str = "default";
 const WASH_PROMPT: &str = "wash> ";
@@ -436,9 +433,26 @@ impl WashRepl {
                     Err(e) => {
                         use structopt::clap::ErrorKind::*;
                         // HelpDisplayed is the StructOpt help text error, which should be displayed as info
+                        const WASH_HELP: &str = "WASH_HELP";
                         match e.kind {
-                            HelpDisplayed => info!(target: WASH_CMD_INFO, "{}", e.message),
-                            _ => error!(target: WASH_CMD_INFO, "{}", e.message),
+                            HelpDisplayed => {
+                                for line in e.message.split('\n') {
+                                    if !line.is_empty() {
+                                        info!(target: WASH_HELP, " {}", line);
+                                    } else {
+                                        info!(target: WASH_HELP, "\n");
+                                    }
+                                }
+                            }
+                            _ => {
+                                for line in e.message.split('\n') {
+                                    if !line.is_empty() {
+                                        error!(target: WASH_HELP, " {}", line)
+                                    } else {
+                                        error!(target: WASH_HELP, "\n");
+                                    }
+                                }
+                            }
                         }
                     }
                 };
@@ -521,7 +535,6 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     // Initialize terminal
     let backend = {
         let stdout = io::stdout().into_raw_mode().unwrap();
-        let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
         TermionBackend::new(stdout)
     };
