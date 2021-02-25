@@ -36,9 +36,9 @@ impl DrainCliCommand {
 
 #[derive(StructOpt, Debug, Clone)]
 pub(crate) enum DrainSelection {
-    /// Remove all cached files created by wasmCloud
+    /// Remove all cached files created by wasmcloud
     All(Output),
-    /// Remove cached files downloaded from OCI registries by wasmCloud
+    /// Remove cached files downloaded from OCI registries by wasmcloud
     Oci(Output),
     /// Remove cached binaries extracted from provider archives
     Lib(Output),
@@ -89,4 +89,29 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P) -> Result<String, Box<dyn ::std:
         }
     }
     Ok(format!("{}", path.as_ref().display()))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    // Enumerates all options of drain subcommands to ensure
+    // changes are not made to the drain API
+    fn test_drain_comprehensive() {
+        let all = DrainCli::from_iter_safe(&["drain", "all", "-o", "text"]).unwrap();
+        match all.command.selection {
+            DrainSelection::All(output) => assert_eq!(output.kind, OutputKind::Text),
+            _ => panic!("drain constructed incorrect command"),
+        }
+        let lib = DrainCli::from_iter_safe(&["drain", "lib", "-o", "text"]).unwrap();
+        match lib.command.selection {
+            DrainSelection::Lib(output) => assert_eq!(output.kind, OutputKind::Text),
+            _ => panic!("drain constructed incorrect command"),
+        }
+        let oci = DrainCli::from_iter_safe(&["drain", "oci", "-o", "json"]).unwrap();
+        match oci.command.selection {
+            DrainSelection::Oci(output) => assert_eq!(output.kind, OutputKind::JSON),
+            _ => panic!("drain constructed incorrect command"),
+        }
+    }
 }

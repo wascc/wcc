@@ -417,9 +417,7 @@ pub(crate) async fn push_artifact(
 #[cfg(test)]
 mod tests {
     use super::{PullCommand, PushCommand, RegCli, RegCliCommand};
-    use crate::util::{OutputKind, Result};
-    use std::fs::File;
-    use std::io::prelude::*;
+    use crate::util::OutputKind;
     use structopt::StructOpt;
 
     const ECHO_WASM: &str = "wasmcloud.azurecr.io/echo:0.2.0";
@@ -499,7 +497,7 @@ mod tests {
     /// Enumerates multiple options of the `push` command to ensure API doesn't
     /// change between versions. This test will fail if `wash reg push`
     /// changes syntax, ordering of required elements, or flags.
-    fn test_push_comprehensive() -> Result<()> {
+    fn test_push_comprehensive() {
         // Not explicitly used, just a placeholder for a directory
         const TESTDIR: &str = "./tests/fixtures";
 
@@ -591,7 +589,5 @@ mod tests {
             }
             _ => panic!("`reg push` constructed incorrect command"),
         };
-
-        Ok(())
     }
 }

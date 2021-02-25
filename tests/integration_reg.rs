@@ -103,7 +103,6 @@ fn integration_push_basic() {
     let push_dir = test_dir_with_subfolder(SUBFOLDER);
 
     let pull_echo_wasm = test_dir_file(SUBFOLDER, "echo.wasm");
-    // let pull_logging_par = test_dir_file(SUBFOLDER, "logging.par.gz");
 
     // Pull echo.wasm for push tests
     wash()
@@ -116,16 +115,6 @@ fn integration_push_basic() {
         ])
         .output()
         .unwrap_or_else(|_| panic!("failed to pull {} for push basic", ECHO_WASM));
-    // wash()
-    //     .args(&[
-    //         "reg",
-    //         "pull",
-    //         LOGGING_PAR,
-    //         "--destination",
-    //         pull_logging_par.clone().to_str().unwrap(),
-    //     ])
-    //     .output()
-    //     .expect(&format!("failed to pull {} for push basic", LOGGING_PAR));
 
     // Push echo.wasm and pull from local registry
     let echo_push_basic = &format!("{}/echo:pushbasic", LOCAL_REGISTRY);

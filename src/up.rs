@@ -105,15 +105,15 @@ struct ReplCli {
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(global_settings(&[AppSettings::ColorNever, AppSettings::DisableVersion, AppSettings::VersionlessSubcommands]))]
 enum ReplCliCommand {
-    // Manage contents of local wasmCloud cache
+    // Manage contents of local wasmcloud cache
     #[structopt(name = "drain")]
     Drain(DrainCliCommand),
 
-    /// Create, inspect, and modify capability provider archive files
+    /// Interact with a wasmcloud control interface
     #[structopt(name = "ctl")]
     Ctl(CtlCliCommand),
 
-    /// Generate and manage JWTs for wasmCloud Actors
+    /// Generate and manage JWTs for wasmcloud Actors
     #[structopt(name = "claims")]
     Claims(ClaimsCliCommand),
 
@@ -121,11 +121,11 @@ enum ReplCliCommand {
     #[structopt(name = "keys")]
     Keys(KeysCliCommand),
 
-    /// Interact with OCI compliant registries
+    /// Create, inspect, and modify capability provider archive files
     #[structopt(name = "par")]
     Par(ParCliCommand),
 
-    /// Launch wasmCloud REPL environment
+    /// Launch wasmcloud REPL environment
     #[structopt(name = "reg")]
     Reg(RegCliCommand),
 
@@ -795,7 +795,7 @@ mod test {
 
     #[test]
     /// Enumerates multiple options of the `up` command to ensure API doesn't
-    /// change between versions. This test will fail if `wash keys list`
+    /// change between versions. This test will fail if `wash up`
     /// changes syntax, ordering of required elements, or flags.
     fn test_up_comprehensive() -> Result<()> {
         const LOG_LEVEL: &str = "info";
@@ -846,7 +846,7 @@ mod test {
     }
 
     #[test]
-    fn test_up_input_format() -> Result<()> {
+    fn test_up_input_format() {
         const CALL_INPUT: &str = "ctl call MBCFOPM6JW2APJLXJD3Z5O4CN7CPYJ2B4FTKLJUR5YR5MITIU7HD3WD5 HandleRequest {\"method\": \"GET\", \"path\": \"/\", \"body\": \"\", \"queryString\":\"\", \"header\":{}}";
         const START_ACTOR_INPUT: &str = "ctl start actor wasmcloud.azurecr.io/echo:0.2.0";
         const LINK_INPUT: &str = "ctl link MCFMFDWFHGKELOXPCNCDXKK5OFLHBVEWRAOXR5JSQUD2TOFRE3DFPM7E VAG3QITQQ2ODAOWB5TTQSDJ53XK3SHBEIFNK4AYJ5RKAX2UNSCAPHA5M wasmcloud:httpserver PORT=8080";
@@ -874,8 +874,6 @@ mod test {
         let mut link_iter = link_input_display.split('\n');
         assert_eq!(link_first_line, link_iter.next().unwrap());
         assert_eq!(link_second_line, link_iter.next().unwrap());
-
-        Ok(())
     }
 
     #[test]

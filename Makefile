@@ -7,7 +7,7 @@ test: ## Run unit test suite
 
 test-integration: ##Run integration test suite
 	docker-compose -f ./tools/docker-compose.yml up --detach
-	-cargo test --no-fail-fast --verbose --test "integration*" -- --nocapture
+	cargo test --no-fail-fast --verbose --test "integration*" -- --nocapture
 	docker-compose -f ./tools/docker-compose.yml down
 
 test-all: test test-integration ## Run all tests
