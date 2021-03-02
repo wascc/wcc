@@ -304,7 +304,7 @@ pub(crate) struct ActorMetadata {
     /// Human-readable version string
     #[structopt(short = "v", long = "ver")]
     ver: Option<String>,
-    /// Developer or human friendly unique alias for an alternative identifier for an actor, consisting of lowercase alphanumeric characters, underscores '_' and backslashes '/'
+    /// Developer or human friendly unique alias used for invoking an actor, consisting of lowercase alphanumeric characters, underscores '_' and backslashes '/'
     #[structopt(short = "a", long = "call-alias")]
     call_alias: Option<String>,
 
@@ -748,7 +748,7 @@ pub(crate) fn render_actor_claims(
         .unwrap()
         .call_alias
         .clone()
-        .unwrap_or("(not set)".to_string());
+        .unwrap_or("(Not set)".to_string());
 
     match output.kind {
         OutputKind::JSON => {
