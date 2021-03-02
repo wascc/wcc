@@ -304,7 +304,7 @@ pub(crate) struct ActorMetadata {
     /// Human-readable version string
     #[structopt(short = "v", long = "ver")]
     ver: Option<String>,
-    /// Developer or human friendly unique alias for an alternative identifier for an actor
+    /// Developer or human friendly unique alias for an alternative identifier for an actor, consisting of lowercase alphanumeric characters, underscores '_' and backslashes '/'
     #[structopt(short = "a", long = "call-alias")]
     call_alias: Option<String>,
 
@@ -748,7 +748,7 @@ pub(crate) fn render_actor_claims(
         .unwrap()
         .call_alias
         .clone()
-        .unwrap_or("N/A".to_string());
+        .unwrap_or("(not set)".to_string());
 
     match output.kind {
         OutputKind::JSON => {
@@ -876,17 +876,17 @@ fn sanitize_alias(
         } else if alias.len() == 56
             && alias
                 .chars()
-                .all(|c| c.is_ascii_digit() || c.is_ascii_alphabetic() && c.is_uppercase())
+                .all(|c| c.is_ascii_digit() || c.is_ascii_uppercase())
         {
             Err("Public key cannot be used as a call alias".into())
-        // Valid aliases contain a combination of alphanumeric characters, dashes, and backslashes
+        // Valid aliases contain a combination of lowercase alphanumeric characters, dashes, and backslashes
         } else if alias
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '/')
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '/')
         {
             Ok(Some(alias))
         } else {
-            Err("Call alias contained invalid characters.\nValid aliases are alphanumeric and can contain dashes and backslashes".into())
+            Err("Call alias contained invalid characters.\nValid aliases are lowercase alphanumeric and can contain underscores and backslashes".into())
         }
     } else {
         Ok(None)
@@ -903,6 +903,7 @@ mod test {
         const VALID_ALPHANUMERIC: &str = "abc123";
         const VALID_WITHSYMBOLS: &str = "myorganization/subfolder_three";
         const INVALID_SYMBOLS: &str = "hello*^&%@#";
+        const INVALID_CAPITAL: &str = "wasmCloud/camelCase_";
         const INVALID_PKEY: &str = "MCUOUQQP3WK4EWO76DPWIEKXMN4JYZ63KEGIEEHZCNBR2GEIXPB4ZFUT";
 
         assert_eq!(
@@ -918,11 +919,17 @@ mod test {
             VALID_WITHSYMBOLS
         );
 
-        let invalid_message = "Call alias contained invalid characters.\nValid aliases are alphanumeric and can contain dashes and backslashes";
+        let invalid_message = "Call alias contained invalid characters.\nValid aliases are lowercase alphanumeric and can contain underscores and backslashes";
         let invalid_symbols = sanitize_alias(Some(INVALID_SYMBOLS.to_string()));
         match invalid_symbols {
             Err(e) => assert_eq!(format!("{}", e), invalid_message),
             _ => panic!("invalid symbols in call alias should not be accepted"),
+        };
+
+        let invalid_uppercase = sanitize_alias(Some(INVALID_CAPITAL.to_string()));
+        match invalid_uppercase {
+            Err(e) => assert_eq!(format!("{}", e), invalid_message),
+            _ => panic!("uppercase symbols in call alias should not be accepted"),
         };
 
         let pkey_message = "Public key cannot be used as a call alias";
