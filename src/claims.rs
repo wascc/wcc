@@ -304,7 +304,7 @@ pub(crate) struct ActorMetadata {
     /// Human-readable version string
     #[structopt(short = "v", long = "ver")]
     ver: Option<String>,
-    /// Developer or human friendly unique alias used for invoking an actor, consisting of lowercase alphanumeric characters, underscores '_' and backslashes '/'
+    /// Developer or human friendly unique alias used for invoking an actor, consisting of lowercase alphanumeric characters, underscores '_' and slashes '/'
     #[structopt(short = "a", long = "call-alias")]
     call_alias: Option<String>,
 
@@ -879,14 +879,14 @@ fn sanitize_alias(
                 .all(|c| c.is_ascii_digit() || c.is_ascii_uppercase())
         {
             Err("Public key cannot be used as a call alias".into())
-        // Valid aliases contain a combination of lowercase alphanumeric characters, dashes, and backslashes
+        // Valid aliases contain a combination of lowercase alphanumeric characters, dashes, and slashes
         } else if alias
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '/')
         {
             Ok(Some(alias))
         } else {
-            Err("Call alias contained invalid characters.\nValid aliases are lowercase alphanumeric and can contain underscores and backslashes".into())
+            Err("Call alias contained invalid characters.\nValid aliases are lowercase alphanumeric and can contain underscores and slashes".into())
         }
     } else {
         Ok(None)
@@ -919,7 +919,7 @@ mod test {
             VALID_WITHSYMBOLS
         );
 
-        let invalid_message = "Call alias contained invalid characters.\nValid aliases are lowercase alphanumeric and can contain underscores and backslashes";
+        let invalid_message = "Call alias contained invalid characters.\nValid aliases are lowercase alphanumeric and can contain underscores and slashes";
         let invalid_symbols = sanitize_alias(Some(INVALID_SYMBOLS.to_string()));
         match invalid_symbols {
             Err(e) => assert_eq!(format!("{}", e), invalid_message),
