@@ -5,7 +5,7 @@ use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
 use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
-use log::{error, info, warn, LevelFilter};
+use log::{error, info, LevelFilter};
 use std::io;
 use std::sync::{Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
@@ -148,7 +148,7 @@ enum ReplCliCommand {
     Clear,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct InputState {
     history: Vec<Vec<char>>,
     history_cursor: usize,
@@ -167,7 +167,7 @@ impl Default for InputState {
             input: vec![],
             input_cursor: 0,
             multiline_history: 0,
-            input_width: 0,
+            input_width: 40,
             focused: true,
         }
     }
@@ -300,9 +300,7 @@ impl WashRepl {
                 if self.input_state.history.is_empty() {
                     return Ok(());
                 };
-                if self.input_state.history_cursor < self.input_state.history.len() - 1
-                    && self.input_state.history_cursor > 0
-                {
+                if self.input_state.history_cursor < self.input_state.history.len() - 1 {
                     self.input_state.history_cursor += 1;
                     self.input_state.input =
                         self.input_state.history[self.input_state.history_cursor].clone();
@@ -329,7 +327,6 @@ impl WashRepl {
                 //TODO(issue #67): navigate right one word
                 ()
             }
-            //TODO(brooksmtownsend): ensure this works for return especially on windows
             Key::Char(c) if c == '\n' => {
                 let cmd: String = self.input_state.input.iter().collect();
                 let iter = cmd.split_ascii_whitespace();
@@ -1001,11 +998,133 @@ mod test {
         assert_eq!(link_second_line, link_iter.next().unwrap());
     }
 
-    #[test]
-    //TODO(brooksmtownsend): Write this test after merging in tui_logger changes. This changes the API
-    fn test_key_events() {
-        // let repl = WashRepl::default();
-        // repl.handle_key(code: KeyCode, modifier: KeyModifiers)
+    #[actix_rt::test]
+    async fn test_key_events() {
+        let mut repl = WashRepl::default();
+        const OUTPUT_SCROLL: u16 = 42;
+        const OUTPUT_CURSOR: usize = 30;
+        const INPUT_HISTORY: &str = "ctl get hosts";
+        const INPUT: &str =
+            "ctl get inventory NBLX6IFXQGPPK74GG7Q4OVLDTXB3MPKLCXX7LPEXD4QP7DSD2HN7L56D";
+        let output: Vec<String> = vec!["command output".to_string(); OUTPUT_CURSOR];
+
+        // REPL input state setup
+        repl.input_state
+            .history
+            .push(INPUT_HISTORY.chars().collect::<Vec<char>>());
+        repl.input_state
+            .history
+            .push(INPUT_HISTORY.chars().collect::<Vec<char>>());
+        repl.input_state.history_cursor += 2;
+        assert_eq!(repl.input_state.history_cursor, 2);
+        assert_eq!(repl.input_state.history.len(), 2);
+        for c in INPUT.chars() {
+            repl.handle_key_event(Key::Char(c)).await.unwrap();
+        }
+        assert_eq!(repl.input_state.input_cursor, INPUT.len());
+
+        // REPL output state setup
+        repl.output_state.lock().unwrap().output_scroll += OUTPUT_SCROLL;
+        repl.output_state.lock().unwrap().output = output;
+        repl.output_state.lock().unwrap().output_cursor += OUTPUT_CURSOR;
+        assert_eq!(
+            repl.output_state.lock().unwrap().output_scroll,
+            OUTPUT_SCROLL
+        );
+        assert_eq!(
+            repl.output_state.lock().unwrap().output_cursor,
+            OUTPUT_CURSOR
+        );
+
+        // PageUp / PageDown with REPL focus
+        repl.handle_key_event(Key::PageUp).await.unwrap();
+        assert_eq!(
+            repl.output_state.lock().unwrap().output_cursor,
+            OUTPUT_CURSOR - 1
+        );
+        repl.handle_key_event(Key::PageUp).await.unwrap();
+        assert_eq!(
+            repl.output_state.lock().unwrap().output_cursor,
+            OUTPUT_CURSOR - 2
+        );
+        repl.handle_key_event(Key::PageDown).await.unwrap();
+        assert_eq!(
+            repl.output_state.lock().unwrap().output_cursor,
+            OUTPUT_CURSOR - 1
+        );
+
+        // Left/Right with REPL focus
+        repl.handle_key_event(Key::Left).await.unwrap();
+        repl.handle_key_event(Key::Left).await.unwrap();
+        repl.handle_key_event(Key::Left).await.unwrap();
+        assert_eq!(repl.input_state.input_cursor, INPUT.len() - 3);
+        repl.handle_key_event(Key::Right).await.unwrap();
+        repl.handle_key_event(Key::Right).await.unwrap();
+        assert_eq!(repl.input_state.input_cursor, INPUT.len() - 1);
+        repl.handle_key_event(Key::Right).await.unwrap();
+        assert_eq!(repl.input_state.input_cursor, INPUT.len());
+
+        // Backspace with REPL focus
+        repl.handle_key_event(Key::Backspace).await.unwrap();
+        repl.handle_key_event(Key::Backspace).await.unwrap();
+        repl.handle_key_event(Key::Backspace).await.unwrap();
+        repl.handle_key_event(Key::Backspace).await.unwrap();
+        assert_eq!(repl.input_state.input_cursor, INPUT.len() - 4);
+        assert_eq!(
+            &repl.input_state.input,
+            &INPUT[..INPUT.len() - 4].chars().collect::<Vec<char>>()
+        );
+
+        // ALT+Left('b') / Right('f')
+        //TODO(issue #67): Ensure cursor navigates by one "word"
+        assert!(repl.handle_key_event(Key::Alt('b')).await.is_ok());
+        assert!(repl.handle_key_event(Key::Alt('f')).await.is_ok());
+
+        // Up / Down with REPL focus
+        repl.handle_key_event(Key::Up).await.unwrap();
+        assert_eq!(repl.input_state.history_cursor, 1);
+        assert_eq!(
+            repl.input_state.input,
+            INPUT_HISTORY.chars().collect::<Vec<char>>()
+        );
+        assert_eq!(repl.input_state.input_cursor, INPUT_HISTORY.len());
+        repl.handle_key_event(Key::Down).await.unwrap();
+        assert_eq!(repl.input_state.history_cursor, 2);
+        assert!(repl.input_state.input.is_empty());
+        assert_eq!(repl.input_state.input_cursor, 0);
+        repl.handle_key_event(Key::Up).await.unwrap();
+        repl.handle_key_event(Key::Up).await.unwrap();
+        repl.handle_key_event(Key::Down).await.unwrap();
+        assert_eq!(repl.input_state.history_cursor, 1);
+        assert_eq!(
+            repl.input_state.input,
+            INPUT_HISTORY.chars().collect::<Vec<char>>()
+        );
+        assert_eq!(repl.input_state.input_cursor, INPUT_HISTORY.len());
+
+        // Clear REPL input again
+        repl.handle_key_event(Key::Down).await.unwrap();
+
+        repl.handle_key_event(Key::Char('c')).await.unwrap();
+        repl.handle_key_event(Key::Char('l')).await.unwrap();
+        repl.handle_key_event(Key::Char('e')).await.unwrap();
+        repl.handle_key_event(Key::Char('a')).await.unwrap();
+        repl.handle_key_event(Key::Char('r')).await.unwrap();
+        repl.handle_key_event(Key::Char('\n')).await.unwrap();
+
+        assert_eq!(repl.input_state, InputState::default());
+
+        let quit_options = vec!["exit", "logout", "q", ":q!"];
+        for opt in quit_options {
+            for c in opt.chars() {
+                repl.handle_key_event(Key::Char(c)).await.unwrap();
+            }
+            let res = repl.handle_key_event(Key::Char('\n')).await;
+            match res {
+                Err(e) => assert_eq!(format!("{}", e), "REPL Quit"),
+                _ => panic!("REPL exit option {} did not quit REPL", opt),
+            }
+        }
     }
 
     #[test]
