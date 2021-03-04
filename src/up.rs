@@ -319,14 +319,14 @@ impl WashRepl {
                     self.input_state.input.remove(self.input_state.input_cursor);
                 };
             }
-            Key::Alt(c) if c == 'b' => {
-                //TODO(issue #67): navigate left one word
-                ()
-            }
-            Key::Alt(c) if c == 'f' => {
-                //TODO(issue #67): navigate right one word
-                ()
-            }
+            //TODO(issue #67): navigate left one word
+            // Key::Alt(c) if c == 'b' => {
+            //     ()
+            // }
+            //TODO(issue #67): navigate right one word
+            // Key::Alt(c) if c == 'f' => {
+            //     ()
+            // }
             Key::Char(c) if c == '\n' => {
                 let cmd: String = self.input_state.input.iter().collect();
                 let iter = cmd.split_ascii_whitespace();
@@ -612,15 +612,12 @@ https://www.wasmcloud.dev/overview/getting-started/#starting-nats for instructio
     let (tx, rx) = std::sync::mpsc::channel();
     let tx_event = tx.clone();
     std::thread::spawn({
-        let f = {
-            let stdin = io::stdin();
-            move || {
-                for c in stdin.events() {
-                    tx_event.send(c).unwrap();
-                }
+        let stdin = io::stdin();
+        move || {
+            for c in stdin.events() {
+                tx_event.send(c).unwrap();
             }
-        };
-        f
+        }
     });
 
     loop {
@@ -818,7 +815,7 @@ fn draw_input_panel(frame: &mut Frame<REPLTermionBackend>, state: &mut InputStat
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(Span::styled(format!(" REPL "), style)),
+                .title(Span::styled(" REPL ", style)),
         )
         .style(Style::default().fg(Color::White))
         .alignment(Alignment::Left)
