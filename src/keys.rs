@@ -113,7 +113,7 @@ pub(crate) fn get(
         Ok(s) => Ok(format_output(
             s.trim().to_string(),
             json!({ "seed": s.trim() }),
-            output,
+            &output.kind,
         )),
     }
 }
@@ -211,7 +211,7 @@ If you'd like to use alternative keys, you can supply them as a flag.\n",
                         path
                     ),
                     json!({"status": "No keypair found", "path": path, "keygen": "true"}),
-                    &Output::default(),
+                    &Output::default().kind,
                 ));
 
                 let kp = KeyPair::new(keygen_type);

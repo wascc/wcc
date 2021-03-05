@@ -89,12 +89,13 @@ async fn integration_ctl_actor_roundtrip() -> Result<()> {
         .output()
         .expect("failed to get start actor acknowledgement");
     let failed_echo = output_to_string(start_echo_again);
-    assert!(failed_echo.contains(&format!("\"actor_ref\":\"{}\"", ECHO)));
-    assert!(failed_echo.contains(&format!(
-        "\"failure\":\"Actor with image ref \'{}\' is already running on this host\"",
-        ECHO
-    )));
-    assert!(failed_echo.contains(&format!("\"host_id\":\"{}\"", host_id)));
+    assert_eq!(
+        failed_echo,
+        format!(
+            "{{\"error\":\"Actor with image ref '{}' is already running on this host\"}}\n",
+            ECHO
+        )
+    );
 
     let payload = "{\"method\": \"GET\", \"path\": \"/echo\", \"body\": \"\", \"queryString\":\"\", \"header\":{}}";
     let call_echo = wash()
@@ -199,14 +200,13 @@ async fn integration_ctl_actor_provider_roundtrip() -> Result<()> {
         .output()
         .expect("failed to get start actor acknowledgement");
     let failed_httpserver = output_to_string(start_httpserver_again);
-    assert!(failed_httpserver.contains(&format!(
-        "\"failure\":\"Provider with image ref \'{}\' is already running on this host.\"",
-        HTTPSERVER
-    )));
-    assert!(failed_httpserver.contains(&format!("\"host_id\":\"{}\"", host_id)));
-    // TODO: this should be tested, but is a bug as of wasmcloud-host 0.15.1.
-    // Once https://github.com/wasmcloud/wasmcloud/issues/106 is closed, this should be uncommented
-    // assert!(failed_httpserver.contains(&format!("\"provider_ref\":\"{}\"", HTTPSERVER)));
+    assert_eq!(
+        failed_httpserver,
+        format!(
+            "{{\"error\":\"Provider with image ref '{}' is already running on this host.\"}}\n",
+            HTTPSERVER
+        )
+    );
 
     let link_echo_httpserver = wash()
         .args(&[

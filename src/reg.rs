@@ -169,7 +169,7 @@ pub(crate) async fn handle_pull(cmd: PullCommand) -> Result<String, Box<dyn ::st
             SHOWER_EMOJI, outfile
         ),
         json!({"result": "success", "file": outfile}),
-        &cmd.output,
+        &cmd.output.kind,
     ))
 }
 
@@ -333,7 +333,7 @@ pub(crate) async fn handle_push(cmd: PushCommand) -> Result<String, Box<dyn ::st
             SHOWER_EMOJI, cmd.url
         ),
         json!({"result": "success", "url": cmd.url}),
-        &cmd.output,
+        &cmd.output.kind,
     ))
 }
 

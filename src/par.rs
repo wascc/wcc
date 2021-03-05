@@ -269,7 +269,7 @@ pub(crate) fn handle_create(cmd: CreateCommand) -> Result<String> {
             format_output(
                 format!("Successfully created archive {}", outfile),
                 json!({"result": "success", "file": outfile}),
-                &cmd.output,
+                &cmd.output.kind,
             )
         },
     )
@@ -417,7 +417,7 @@ pub(crate) fn handle_insert(cmd: InsertCommand) -> Result<String> {
             cmd.binary, cmd.archive
         ),
         json!({"result": "success", "file": cmd.archive}),
-        &cmd.output,
+        &cmd.output.kind,
     ))
 }
 

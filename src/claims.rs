@@ -430,7 +430,11 @@ fn generate_actor(actor: ActorMetadata) -> Result<String, Box<dyn ::std::error::
     );
 
     let jwt = claims.encode(&issuer)?;
-    let out = format_output(jwt.clone(), json!({ "token": jwt }), &actor.common.output);
+    let out = format_output(
+        jwt.clone(),
+        json!({ "token": jwt }),
+        &actor.common.output.kind,
+    );
 
     Ok(out)
 }
@@ -471,7 +475,7 @@ fn generate_operator(operator: OperatorMetadata) -> Result<String, Box<dyn ::std
     let out = format_output(
         jwt.clone(),
         json!({ "token": jwt }),
-        &operator.common.output,
+        &operator.common.output.kind,
     );
     Ok(out)
 }
@@ -514,7 +518,11 @@ fn generate_account(account: AccountMetadata) -> Result<String, Box<dyn ::std::e
         },
     );
     let jwt = claims.encode(&issuer)?;
-    let out = format_output(jwt.clone(), json!({ "token": jwt }), &account.common.output);
+    let out = format_output(
+        jwt.clone(),
+        json!({ "token": jwt }),
+        &account.common.output.kind,
+    );
     Ok(out)
 }
 
@@ -550,7 +558,7 @@ fn generate_provider(provider: ProviderMetadata) -> Result<String, Box<dyn ::std
     let out = format_output(
         jwt.clone(),
         json!({ "token": jwt }),
-        &provider.common.output,
+        &provider.common.output.kind,
     );
     Ok(out)
 }
@@ -654,7 +662,7 @@ fn sign_file(cmd: SignCommand) -> Result<String, Box<dyn ::std::error::Error>> {
                 caps_list.join(",")
             ),
             json!({"result": "success", "destination": destination, "capabilities": caps_list}),
-            &cmd.metadata.common.output,
+            &cmd.metadata.common.output.kind,
         )),
         Err(e) => Err(Box::new(e)),
     }?;

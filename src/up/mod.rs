@@ -5,7 +5,7 @@ use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
 use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
-use log::{error, info, LevelFilter};
+use log::{error, info, warn, LevelFilter};
 use std::io;
 use std::sync::{Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
@@ -24,13 +24,20 @@ use tui::{
     Frame, Terminal,
 };
 use tui_logger::*;
+use wasmcloud_control_interface::Host;
 use wasmcloud_host::HostBuilder;
+
+mod standalone;
+use standalone::HostCommand;
 
 type REPLTermionBackend =
     tui::backend::TermionBackend<AlternateScreen<RawTerminal<std::io::Stdout>>>;
 
 const CTL_NS: &str = "default";
 const WASH_PROMPT: &str = "wash> ";
+const REPL_INIT: &str = " REPL (Initializing...) ";
+const REPL_STANDALONE: &str = " REPL (Standalone) ";
+const REPL_LATTICE: &str = " REPL (Lattice connected) ";
 /// Option is unsupported for MacOS, the following byte slices correspond
 /// to [1;3A for Option+UP and [1;3B for Option+Down
 const OPTIONUP: &[u8] = &[27_u8, 91_u8, 49_u8, 59_u8, 51_u8, 65_u8];
@@ -157,6 +164,7 @@ struct InputState {
     multiline_history: u16, // amount to offset cursor for multiline inputs
     input_width: usize,
     focused: bool,
+    title: String,
 }
 
 impl Default for InputState {
@@ -169,6 +177,7 @@ impl Default for InputState {
             multiline_history: 0,
             input_width: 40,
             focused: true,
+            title: REPL_INIT.to_string(),
         }
     }
 }
@@ -220,6 +229,7 @@ struct WashRepl {
     input_state: InputState,
     output_state: Arc<Mutex<OutputState>>,
     tui_state: TuiWidgetState,
+    host_op_sender: Option<std::sync::mpsc::Sender<CtlCliCommand>>,
 }
 
 impl Default for WashRepl {
@@ -228,6 +238,7 @@ impl Default for WashRepl {
             input_state: InputState::default(),
             output_state: Arc::new(Mutex::new(OutputState::default())),
             tui_state: TuiWidgetState::new(),
+            host_op_sender: None,
         }
     }
 }
@@ -379,15 +390,20 @@ impl WashRepl {
                             }
                             ReplCliCommand::Ctl(ctlcmd) => {
                                 let output_state = Arc::clone(&self.output_state);
-                                std::thread::spawn(|| {
-                                    let mut rt = actix_rt::System::new("cmd");
-                                    rt.block_on(async {
-                                        match handle_ctl(ctlcmd, output_state).await {
-                                            Ok(r) => r,
-                                            Err(e) => error!("Error handling ctl: {}", e),
-                                        };
+                                // If an event sender exists, host is running in standalone mode and should receive the `ctl` command
+                                if let Some(sender) = &self.host_op_sender {
+                                    sender.send(ctlcmd)?
+                                } else {
+                                    std::thread::spawn(|| {
+                                        let mut rt = actix_rt::System::new("cmd");
+                                        rt.block_on(async {
+                                            match handle_ctl(ctlcmd, output_state).await {
+                                                Ok(r) => r,
+                                                Err(e) => error!("Error handling ctl: {}", e),
+                                            };
+                                        });
                                     });
-                                });
+                                }
                             }
                             ReplCliCommand::Keys(keyscmd) => {
                                 let output_state = Arc::clone(&self.output_state);
@@ -548,80 +564,246 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     repl.draw_ui(&mut terminal)?;
 
     // Launch host in separate thread to avoid blocking host operations
+    // Channel for host operations (in standalone mode)
+    let (host_op_sender, host_op_receiver) = std::sync::mpsc::channel();
+    // Channel for host output (in standalone mode)
+    let (host_output_sender, host_output_receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut rt = actix_rt::System::new("replhost");
         rt.block_on(async move {
-            let nc_rpc =
-                match nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await {
-                    Ok(conn) => conn,
-                    Err(_e) => {
-                        error!(
+            let nats_connection =
+                nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
+            match nats_connection {
+                // Launch a lattice-connected host
+                Ok(conn) => {
+                    let host = HostBuilder::new()
+                        .with_namespace(CTL_NS)
+                        .with_rpc_client(conn.clone())
+                        .with_control_client(conn)
+                        .with_label("repl_mode", "true")
+                        .with_label("lattice_connected", "true")
+                        .oci_allow_latest()
+                        .oci_allow_insecure(vec!["localhost:5000".to_string()])
+                        .enable_live_updates()
+                        .build();
+                    if let Err(_e) = host.start().await.map_err(convert_error) {
+                        error!(target: WASH_LOG_INFO, "Error launching REPL host");
+                    } else {
+                        info!(
+                            target: WASH_LOG_INFO,
+                            "Host ({}) started in namespace ({})",
+                            host.id(),
+                            CTL_NS
+                        );
+                        host_output_sender.send(REPL_LATTICE.to_string()).unwrap();
+                        drop(host_output_sender);
+                    };
+                    // Since CTRL+C won't be captured by this thread, host will stop when REPL exits
+                    actix_rt::signal::ctrl_c().await.unwrap();
+                    host.stop().await;
+                }
+                // Launch a self-contained (e.g. not lattice connected) host
+                Err(_) => {
+                    let host = HostBuilder::new()
+                        .with_namespace(CTL_NS)
+                        .with_label("repl_mode", "true")
+                        .with_label("lattice_connected", "false")
+                        .oci_allow_latest()
+                        .oci_allow_insecure(vec!["localhost:5000".to_string()])
+                        .enable_live_updates()
+                        .build();
+                    if let Err(_e) = host.start().await.map_err(convert_error) {
+                        error!(target: WASH_LOG_INFO, "Error launching local REPL host");
+                    } else {
+                        warn!(
                             target: WASH_CMD_INFO,
-                            "Error connecting to NATS at {}:{}",
+                            "Unable to connect to NATS at {}:{}
+refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how to configure NATS",
                             cmd.rpc_host,
                             cmd.rpc_port
                         );
-                        error!(target: WASH_CMD_INFO, "NATS is required to run control interface (ctl) commands. Please refer to
-https://www.wasmcloud.dev/overview/getting-started/#starting-nats for instructions on how to launch NATS");
-                        return;
-                    }
-                };
-            let nc_control =
-                match nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await {
-                    Ok(conn) => conn,
-                    Err(_e) => {
-                        error!(
+                        warn!(
                             target: WASH_CMD_INFO,
-                            "Error connecting to NATS at {}:{}",
-                            cmd.rpc_host,
-                            cmd.rpc_port
+                            "Host started without a lattice connection"
                         );
-                        error!(target: WASH_CMD_INFO, "NATS is required to run control interface (ctl) commands. Please refer to
-https://www.wasmcloud.dev/overview/getting-started/#starting-nats for instructions on how to launch NATS");
-                        return;
+                        info!(
+                            target: WASH_LOG_INFO,
+                            "Host ({}) started in namespace ({})",
+                            host.id(),
+                            CTL_NS
+                        );
+                        host_output_sender
+                            .send(REPL_STANDALONE.to_string())
+                            .unwrap();
+                    };
+                    let host_started = std::time::Instant::now();
+                    // Await commands without blocking the host from operating
+                    loop {
+                        if let Ok(ctlcmd) = host_op_receiver.try_recv() {
+                            use HostCommand::*;
+                            let output = match HostCommand::from(ctlcmd) {
+                                Call {
+                                    actor,
+                                    operation,
+                                    msg,
+                                    output_kind,
+                                } => {
+                                    //TODO(brooksmtownsend): handle unwrap bc call failure shouldn't kill REPL
+                                    let res =
+                                        host.call_actor(&actor, &operation, &msg).await.unwrap();
+                                    call_output(None, res, &output_kind)
+                                }
+                                GetHost { output_kind } => {
+                                    let standalone_host = Host {
+                                        id: host.id(),
+                                        uptime_seconds: host_started.elapsed().as_secs(),
+                                    };
+                                    crate::ctl::get_hosts_output(
+                                        vec![standalone_host],
+                                        &output_kind,
+                                    )
+                                }
+                                GetInventory { } => {
+                                    let actors = host
+                                        .get_actors()
+                                        .await.unwrap().join("\n  ");
+                                    let providers = host
+                                        .get_providers()
+                                        .await.unwrap().join("\n  ");
+                                    warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
+                                    format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)
+                                }
+                                GetClaims {} => "Retrieving claims is not currently supported in standalone mode".to_string(),
+                                Link {
+                                    actor_id,
+                                    provider_id,
+                                    contract_id,
+                                    link_name,
+                                    values,
+                                    output_kind,
+                                } => {
+                                    let failure = host
+                                        .set_link(
+                                            &actor_id,
+                                            &contract_id,
+                                            link_name,
+                                            provider_id.clone(),
+                                            values,
+                                        )
+                                        .await
+                                        .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                    link_output(&actor_id, &provider_id, failure, &output_kind)
+                                }
+                                StartActor {
+                                    actor_ref,
+                                    output_kind,
+                                } => {
+                                    //TODO(issue #105): allow starting actors from disk, should allow it in `ctl` module too
+                                    let failure = host
+                                        .start_actor_from_registry(&actor_ref)
+                                        .await
+                                        .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                    start_actor_output(
+                                        &actor_ref,
+                                        &host.id(),
+                                        failure,
+                                        &output_kind,
+                                    )
+                                }
+                                StartProvider {
+                                    provider_ref,
+                                    link_name,
+                                    output_kind,
+                                } => {
+                                    // TODO(issue #105): allow starting providers from disk, should allow it in `ctl` module too
+                                    let failure = host
+                                        .start_capability_from_registry(
+                                            &provider_ref,
+                                            Some(link_name),
+                                        )
+                                        .await
+                                        .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                    start_provider_output(
+                                        &provider_ref,
+                                        &host.id(),
+                                        failure,
+                                        &output_kind,
+                                    )
+                                }
+                                StopActor {
+                                    actor_ref,
+                                    output_kind,
+                                } => {
+                                    let failure = host
+                                        .stop_actor(&actor_ref)
+                                        .await
+                                        .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                    stop_actor_output(&actor_ref, failure, &output_kind)
+                                }
+                                StopProvider {
+                                    provider_ref,
+                                    contract_id,
+                                    link_name,
+                                    output_kind,
+                                } => {
+                                    let failure = host
+                                        .stop_provider(&provider_ref, &contract_id, Some(link_name))
+                                        .await
+                                        .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                    stop_provider_output(&provider_ref, failure, &output_kind)
+                                }
+                                UpdateActor {} => {
+                                    "Updating actors is not currently supported in standalone mode"
+                                        .to_string()
+                                }
+                            };
+                            host_output_sender.send(output).unwrap();
+                        } else {
+                            actix_rt::time::delay_for(std::time::Duration::from_millis(100)).await;
+                        }
                     }
-                };
-            let host = HostBuilder::new()
-                .with_namespace(CTL_NS)
-                .with_rpc_client(nc_rpc)
-                .with_control_client(nc_control)
-                .with_label("repl_mode", "true")
-                .oci_allow_latest()
-                .oci_allow_insecure(vec!["localhost:5000".to_string()])
-                .enable_live_updates()
-                .build();
-            if let Err(_e) = host.start().await.map_err(convert_error) {
-                error!(target: WASH_LOG_INFO, "Error launching REPL host");
-            } else {
-                info!(
-                    target: WASH_LOG_INFO,
-                    "Host ({}) started in namespace ({})",
-                    host.id(),
-                    CTL_NS
-                );
-            };
-            // Since CTRL+C won't be captured by this thread, host will stop when REPL exits
-            actix_rt::signal::ctrl_c().await.unwrap();
-            host.stop().await;
+                }
+            }
         });
     });
-
     repl.draw_ui(&mut terminal)?;
 
     // Use a channel to asynchronously receive stdin events
-    let (tx, rx) = std::sync::mpsc::channel();
-    let tx_event = tx.clone();
+    let (tui_sender, tui_receiver) = std::sync::mpsc::channel();
     std::thread::spawn({
         let stdin = io::stdin();
         move || {
             for c in stdin.events() {
-                tx_event.send(c).unwrap();
+                tui_sender.send(c).unwrap();
             }
         }
     });
 
+    //TODO(brooksmtownsend): this feels ugly
+    // Set REPL title to the corresponding host mode (Standalone / Lattice)
+    repl.input_state.title = match host_output_receiver.recv() {
+        Ok(title) if title == REPL_STANDALONE => {
+            // Allow REPL to send events to host in separate thread
+            repl.host_op_sender = Some(host_op_sender);
+            title
+        }
+        Ok(title) => title,
+        Err(_) => {
+            error!(
+                target: WASH_CMD_INFO,
+                "Failed to initialize host within REPL"
+            );
+            "no host".to_string()
+        }
+    };
+
+    // Main REPL event loop
     loop {
-        if let Ok(evt) = rx.recv_timeout(std::time::Duration::from_millis(50)) {
+        // If any output is sent by a non-lattice connected host, log to output
+        if let Ok(output) = host_output_receiver.try_recv() {
+            log_to_output(Arc::clone(&repl.output_state), output);
+        }
+        if let Ok(evt) = tui_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             let res = match evt? {
                 // Tab key toggles input focus between REPL and Tui logger selector
                 Event::Key(Key::Char('\t')) => {
@@ -815,7 +997,7 @@ fn draw_input_panel(frame: &mut Frame<REPLTermionBackend>, state: &mut InputStat
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(Span::styled(" REPL ", style)),
+                .title(Span::styled(&state.title, style)),
         )
         .style(Style::default().fg(Color::White))
         .alignment(Alignment::Left)

@@ -75,8 +75,12 @@ impl fmt::Display for OutputParseErr {
 }
 
 /// Returns string output for provided output kind
-pub(crate) fn format_output(text: String, json: serde_json::Value, output: &Output) -> String {
-    match output.kind {
+pub(crate) fn format_output(
+    text: String,
+    json: serde_json::Value,
+    output_kind: &OutputKind,
+) -> String {
+    match output_kind {
         OutputKind::Text => text,
         OutputKind::JSON => format!("{}", json),
     }
