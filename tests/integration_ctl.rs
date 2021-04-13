@@ -333,7 +333,7 @@ async fn integration_ctl_actor_provider_roundtrip() -> Result<()> {
 async fn create_host(namespace: String) -> Result<String> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut rt = actix_rt::System::new("testhost");
+        let rt = actix_rt::System::new();
         rt.block_on(async move {
             let nats_conn = nats::asynk::connect("0.0.0.0:4222").await.unwrap();
             let host = HostBuilder::new()
@@ -370,7 +370,7 @@ async fn wait_for_start(host_id: &str, namespace: &str, resource: &str, retries:
             return true;
         } else {
             count += 1;
-            actix_rt::time::delay_for(std::time::Duration::from_secs(1)).await;
+            actix_rt::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
     false
@@ -390,7 +390,7 @@ async fn wait_for_stop(host_id: &str, namespace: &str, resource: &str, retries: 
             return true;
         } else {
             count += 1;
-            actix_rt::time::delay_for(std::time::Duration::from_secs(1)).await;
+            actix_rt::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
     false
