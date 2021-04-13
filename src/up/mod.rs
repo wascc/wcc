@@ -665,10 +665,10 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                 }
                                 GetInventory { } => {
                                     let actors = host
-                                        .get_actors()
+                                        .actors()
                                         .await.unwrap().join("\n  ");
                                     let providers = host
-                                        .get_providers()
+                                        .providers()
                                         .await.unwrap().join("\n  ");
                                     warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
                                     format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)

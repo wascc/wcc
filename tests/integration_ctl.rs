@@ -190,7 +190,7 @@ async fn integration_ctl_actor_provider_roundtrip() -> Result<()> {
     assert!(start_httpserver.status.success());
 
     assert!(wait_for_start(&host_id, NS, ECHO_PKEY, 30).await);
-    assert!(wait_for_start(&host_id, NS, HTTPSERVER_PKEY, 30).await);
+    assert!(wait_for_start(&host_id, NS, HTTPSERVER_PKEY, 60).await);
 
     // Should fail, can't have two instances of the same provider in a single host
     let start_httpserver_again = wash()
@@ -249,7 +249,23 @@ async fn integration_ctl_actor_provider_roundtrip() -> Result<()> {
         assert!(link_echo_httpserver.status.success());
     }
 
-    let resp = reqwest::blocking::get("http://localhost:8080/echotest")?.text()?;
+    let client = awc::Client::default();
+
+    // Create request builder and send request
+    let resp = String::from_utf8(
+        client
+            .get("http://localhost:8080/echotest")
+            .send() // <- Send request
+            .await
+            .expect("failed to make request to echo")
+            .body()
+            .await
+            .expect("failed to make request to echo")
+            .to_vec(),
+    )
+    .expect("failed to get echo response"); // <- Wait for response
+
+    // let resp = reqwest::blocking::get("http://localhost:8080/echotest")?.text()?;
     assert!(resp.contains("\"method\":\"GET\""));
     assert!(resp.contains("\"path\":\"/echotest\""));
     assert!(resp.contains("\"query_string\":\"\""));
@@ -286,7 +302,14 @@ async fn integration_ctl_actor_provider_roundtrip() -> Result<()> {
     assert!(wait_for_stop(&host_id, NS, HTTPSERVER_PKEY, 30).await);
 
     // Now that actor and provider aren't running, this request should fail
-    assert!(reqwest::blocking::get("http://localhost:8080/echotest").is_err());
+    // assert!(client
+    //     .get("http://localhost:8080/echotest")
+    //     .send()
+    //     .await
+    //     .is_err());
+
+    let resp = client.get("http://localhost:8080/echotest").send().await;
+    println!("RESPO: {:?}", resp);
 
     Ok(())
 }
