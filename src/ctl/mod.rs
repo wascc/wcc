@@ -1,10 +1,9 @@
 extern crate wasmcloud_control_interface;
 use crate::util::{
-    convert_error, format_output, json_str_to_msgpack_bytes, labels_vec_to_hashmap,
-    output_destination, Output, OutputDestination, OutputKind, Result, WASH_CMD_INFO,
+    convert_error, json_str_to_msgpack_bytes, labels_vec_to_hashmap, output_destination, Output,
+    OutputDestination, OutputKind, Result, WASH_CMD_INFO,
 };
 use log::debug;
-use serde_json::json;
 use spinners::{Spinner, Spinners};
 use std::time::Duration;
 use structopt::StructOpt;
@@ -435,18 +434,13 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
                 "Sending request to update actor {} to {}",
                 cmd.actor_id, cmd.new_actor_ref
             );
-            match update_actor(cmd.clone()).await {
-                Ok(r) => format_output(
-                    format!("\nActor {} updated to {}", cmd.actor_id, cmd.new_actor_ref),
-                    json!({ "ack": r }),
-                    &output.kind,
-                ),
-                Err(e) => format_output(
-                    format!("\nError updating actor: {}", e),
-                    json!({ "error": format!("{}", e) }),
-                    &output.kind,
-                ),
-            }
+            let ack = update_actor(cmd.clone()).await;
+            update_actor_output(
+                &cmd.actor_id,
+                &cmd.new_actor_ref,
+                ack.map_or_else(|e| Some(format!("{}", e)), |_| None),
+                &cmd.output.kind,
+            )
         }
     };
 

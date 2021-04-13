@@ -309,41 +309,40 @@ async fn integration_ctl_actor_provider_roundtrip() -> Result<()> {
     //     .is_err());
 
     let resp = client.get("http://localhost:8080/echotest").send().await;
-    println!("RESPO: {:?}", resp);
+    assert!(resp.unwrap().status().is_server_error());
 
     Ok(())
 }
 
-//TODO: Updates with actors with different OCI references are not yet supported.
-// This issue is being tracked at https://github.com/wasmcloud/wasmcloud/issues/108
-// #[actix_rt::test]
-// /// Tests starting and updating an actor
-// async fn integration_ctl_update_actor() -> Result<()> {
-//     const ECHO: &str = "wasmcloud.azurecr.io/echo:0.2.0";
-//     const ECHO_NEW: &str = "wasmcloud.azurecr.io/echo:0.2.1";
-//     const ECHO_PKEY: &str = "MBCFOPM6JW2APJLXJD3Z5O4CN7CPYJ2B4FTKLJUR5YR5MITIU7HD3WD5";
-//     const NS: &str = "update_actor";
-//     let host_id = create_host(NS.to_string()).await?;
+//TODO(brooksmtownsend): Need to ensure OCI references are updated before asserting this
+#[actix_rt::test]
+/// Tests starting and updating an actor
+async fn integration_ctl_update_actor() -> Result<()> {
+    const ECHO: &str = "wasmcloud.azurecr.io/echo:0.2.0";
+    const ECHO_NEW: &str = "wasmcloud.azurecr.io/echo:0.2.1";
+    const ECHO_PKEY: &str = "MBCFOPM6JW2APJLXJD3Z5O4CN7CPYJ2B4FTKLJUR5YR5MITIU7HD3WD5";
+    const NS: &str = "update_actor";
+    let host_id = create_host(NS.to_string()).await?;
 
-//     let start_echo = wash()
-//         .args(&["ctl", "start", "actor", ECHO, "-h", &host_id, "-n", NS])
-//         .output()
-//         .expect("failed to get start actor acknowledgement");
-//     assert!(start_echo.status.success());
+    let start_echo = wash()
+        .args(&["ctl", "start", "actor", ECHO, "-h", &host_id, "-n", NS])
+        .output()
+        .expect("failed to get start actor acknowledgement");
+    assert!(start_echo.status.success());
 
-//     assert!(wait_for_start(&host_id, NS, ECHO, 30).await);
+    assert!(wait_for_start(&host_id, NS, ECHO, 30).await);
 
-//     let update_echo = wash()
-//         .args(&[
-//             "ctl", "update", "actor", &host_id, ECHO_PKEY, ECHO_NEW, "-n", NS, "-o", "json",
-//         ])
-//         .output()
-//         .expect("failed to issue update actor command");
-//     assert!(update_echo.status.success());
-//     assert!(wait_for_start(&host_id, NS, ECHO_NEW, 30).await);
+    let update_echo = wash()
+        .args(&[
+            "ctl", "update", "actor", &host_id, ECHO_PKEY, ECHO_NEW, "-n", NS, "-o", "json",
+        ])
+        .output()
+        .expect("failed to issue update actor command");
+    assert!(update_echo.status.success());
+    // assert!(wait_for_start(&host_id, NS, ECHO_NEW, 30).await);
 
-//     Ok(())
-// }
+    Ok(())
+}
 
 /// Helper function to initialize a host in a separate thread
 /// and return its ID. We create a host in a separate thread because

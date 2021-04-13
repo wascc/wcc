@@ -110,7 +110,7 @@ pub(crate) fn labels_vec_to_hashmap(constraints: Vec<String>) -> Result<HashMap<
     Ok(hm)
 }
 
-/// Transform a json str (e.g. "{"hello": "world"}") and transform it into msgpack bytes
+/// Transform a json str (e.g. "{"hello": "world"}") into msgpack bytes
 pub(crate) fn json_str_to_msgpack_bytes(payload: Vec<String>) -> Result<Vec<u8>> {
     let json: serde_json::value::Value = serde_json::from_str(&payload.join(""))?;
     let payload = serdeconv::to_msgpack_vec(&json)?;

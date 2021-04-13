@@ -15,7 +15,7 @@ pub(crate) fn call_output(error: Option<String>, msg: Vec<u8>, output_kind: &Out
             &output_kind,
         ),
         None => {
-            //TODO(brooksmtownsend): String::from_utf8_lossy should be decoder only if one is not available
+            //TODO(issue #32): String::from_utf8_lossy should be decoder only if one is not available
             let call_response = String::from_utf8_lossy(&msg);
             format_output(
                 format!("\nCall response (raw): {}", call_response),
@@ -152,6 +152,26 @@ pub(crate) fn stop_provider_output(
             json!({ "provider_ref": provider_ref }),
             output_kind,
         ),
+    }
+}
+pub(crate) fn update_actor_output(
+    actor_id: &str,
+    new_actor_ref: &str,
+    error: Option<String>,
+    output_kind: &OutputKind,
+) -> String {
+    if let Some(e) = error {
+        format_output(
+            format!("\nError updating actor: {}", e),
+            json!({ "error": format!("{}", e) }),
+            output_kind,
+        )
+    } else {
+        format_output(
+            format!("\nActor {} updated to {}", actor_id, new_actor_ref),
+            json!({ "accepted": error.is_none() }),
+            output_kind,
+        )
     }
 }
 

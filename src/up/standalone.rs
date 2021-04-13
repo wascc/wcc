@@ -1,13 +1,13 @@
 use super::CtlCliCommand;
 use crate::ctl::*;
-use crate::util::{labels_vec_to_hashmap, OutputKind};
+use crate::util::{labels_vec_to_hashmap, OutputKind, Result};
 use std::collections::HashMap;
 use CtlCliCommand::*;
 pub(crate) enum HostCommand {
     Call {
         actor: String,
         operation: String,
-        msg: Vec<u8>,
+        msg: Result<Vec<u8>>,
         output_kind: OutputKind,
     },
     GetHost {
@@ -24,7 +24,7 @@ pub(crate) enum HostCommand {
         provider_id: String,
         contract_id: String,
         link_name: Option<String>,
-        values: HashMap<String, String>,
+        values: Result<HashMap<String, String>>,
         output_kind: OutputKind,
     },
     StartActor {
@@ -46,7 +46,12 @@ pub(crate) enum HostCommand {
         link_name: String,
         output_kind: OutputKind,
     },
-    UpdateActor {},
+    UpdateActor {
+        actor_id: String,
+        new_oci_ref: Option<String>,
+        bytes: Vec<u8>,
+        output_kind: OutputKind,
+    },
 }
 
 impl From<CtlCliCommand> for HostCommand {
@@ -62,7 +67,7 @@ impl From<CtlCliCommand> for HostCommand {
             }) => HostCommand::Call {
                 actor: actor_id,
                 operation,
-                msg: crate::util::json_str_to_msgpack_bytes(data).unwrap(), //TODO(brooksmtownsend): handle unwrap better
+                msg: crate::util::json_str_to_msgpack_bytes(data),
                 output_kind: output.kind,
             },
             Get(GetCommand::Hosts(cmd)) => HostCommand::GetHost {
@@ -106,10 +111,15 @@ impl From<CtlCliCommand> for HostCommand {
                 provider_id,
                 contract_id,
                 link_name,
-                values: labels_vec_to_hashmap(values).unwrap(), //TODO(brooksmtownsend): catch this unwrap
+                values: labels_vec_to_hashmap(values),
                 output_kind: output.kind,
             },
-            Update(UpdateCommand::Actor(_cmd)) => HostCommand::UpdateActor {},
+            Update(UpdateCommand::Actor(cmd)) => HostCommand::UpdateActor {
+                actor_id: cmd.actor_id,
+                new_oci_ref: Some(cmd.new_actor_ref),
+                bytes: vec![],
+                output_kind: cmd.output.kind,
+            },
         }
     }
 }

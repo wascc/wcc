@@ -21,7 +21,7 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::Span,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
     Frame, Terminal,
 };
 use tui_logger::*;
@@ -645,16 +645,23 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                         if let Ok(ctlcmd) = host_op_receiver.try_recv() {
                             use HostCommand::*;
                             let output = match HostCommand::from(ctlcmd) {
+                                Call { msg, .. } if msg.is_err() => {
+                                    format!("{}", msg.unwrap_err())
+                                }
                                 Call {
                                     actor,
                                     operation,
                                     msg,
                                     output_kind,
                                 } => {
-                                    //TODO(brooksmtownsend): handle unwrap bc call failure shouldn't kill REPL
                                     let res =
-                                        host.call_actor(&actor, &operation, &msg).await.unwrap();
-                                    call_output(None, res, &output_kind)
+                                        host.call_actor(&actor, &operation, &msg.unwrap()).await;
+                                    match res {
+                                        Ok(bytes) => call_output(None, bytes, &output_kind),
+                                        Err(e) => {
+                                            call_output(Some(e.to_string()), vec![], &output_kind)
+                                        }
+                                    }
                                 }
                                 GetHost { output_kind } => {
                                     let standalone_host = Host {
@@ -666,7 +673,6 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                         &output_kind,
                                     )
                                 }
-                                //TODO(brooksmtownsend): not just here, need to kill all teh unwraps and cargo clippy
                                 GetInventory { output_kind } => {
                                     // OCI references are a map from OCI to pub key, we need the reverse of that
                                     let oci_refs = host
@@ -680,7 +686,7 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     let actors = host
                                         .actors()
                                         .await
-                                        .unwrap()
+                                        .unwrap_or_else(|_| vec![])
                                         .iter()
                                         .map(|a| ActorDescription {
                                             id: a.to_string(),
@@ -690,17 +696,15 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     let providers = host
                                         .providers()
                                         .await
-                                        .unwrap()
+                                        .unwrap_or_else(|_| vec![])
                                         .iter()
                                         .map(|p| ProviderDescription {
                                             id: p.to_string(),
                                             image_ref: oci_refs.get(p).cloned().cloned(),
-                                            link_name: "IDK".to_string(),
+                                            link_name: "unknown".to_string(),
                                         })
                                         .collect::<Vec<ProviderDescription>>();
                                     let labels = host.labels().await;
-                                    // warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
-                                    // format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)
                                     crate::ctl::get_host_inventory_output(
                                         HostInventory {
                                             actors,
@@ -712,7 +716,8 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     )
                                 }
                                 GetClaims { output_kind } => {
-                                    let wascap_claims = host.actor_claims().await.unwrap(); //TODO: no unwrap here
+                                    let wascap_claims =
+                                        host.actor_claims().await.unwrap_or_else(|_| vec![]);
                                     let claims = wascap_claims
                                         .iter()
                                         .map(|wc| {
@@ -741,6 +746,9 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                         &output_kind,
                                     )
                                 }
+                                Link { values, .. } if values.is_err() => {
+                                    format!("{}", values.unwrap_err())
+                                }
                                 Link {
                                     actor_id,
                                     provider_id,
@@ -755,7 +763,7 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                             &contract_id,
                                             link_name,
                                             provider_id.clone(),
-                                            values,
+                                            values.unwrap(),
                                         )
                                         .await
                                         .map_or_else(|e| Some(format!("{}", e)), |_| None);
@@ -819,9 +827,39 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                         .map_or_else(|e| Some(format!("{}", e)), |_| None);
                                     stop_provider_output(&provider_ref, failure, &output_kind)
                                 }
-                                UpdateActor {} => {
-                                    "Updating actors is not currently supported in standalone mode"
-                                        .to_string()
+                                UpdateActor {
+                                    actor_id,
+                                    new_oci_ref,
+                                    bytes,
+                                    output_kind,
+                                } => {
+                                    // If the actor is not local, we have to download it from the OCI registry
+                                    //TODO: need connection parameters
+                                    let actor_bytes = if new_oci_ref.is_some() && bytes.is_empty() {
+                                        info!("Downloading new actor module for update");
+                                        crate::reg::pull_artifact(
+                                            new_oci_ref.clone().unwrap(),
+                                            None,
+                                            false,
+                                            None,
+                                            None,
+                                            false,
+                                        )
+                                        .await
+                                        .unwrap_or_else(|_| vec![])
+                                    } else {
+                                        bytes
+                                    };
+                                    let ack = host
+                                        .update_actor(&actor_id, new_oci_ref.clone(), &actor_bytes)
+                                        .await;
+                                    update_actor_output(
+                                        &actor_id,
+                                        &new_oci_ref
+                                            .unwrap_or_else(|| "New local version".to_string()),
+                                        ack.map_or_else(|e| Some(format!("{}", e)), |_| None),
+                                        &output_kind,
+                                    )
                                 }
                             };
                             host_output_sender.send(output).unwrap();
@@ -846,7 +884,6 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
         }
     });
 
-    //TODO(brooksmtownsend): this feels ugly
     // Set REPL title to the corresponding host mode (Standalone / Lattice)
     repl.input_state.title = match host_output_receiver.recv() {
         Ok(title) if title == REPL_STANDALONE => {
