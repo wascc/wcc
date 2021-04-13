@@ -6,6 +6,7 @@ use crate::par::*;
 use crate::reg::*;
 use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use log::{error, info, warn, LevelFilter};
+use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
@@ -24,7 +25,7 @@ use tui::{
     Frame, Terminal,
 };
 use tui_logger::*;
-use wasmcloud_control_interface::Host;
+use wasmcloud_control_interface::{Claims, ClaimsList, Host};
 use wasmcloud_host::HostBuilder;
 
 mod standalone;
@@ -673,9 +674,27 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
                                     format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)
                                 }
-                                GetClaims {} => {
-                                    // let claims = host.get_claims();
-                                    "Retrieving claims is not currently supported in standalone mode".to_string()
+                                GetClaims { output_kind } => {
+                                    let wascap_claims = host.actor_claims().await.unwrap();//TODO: no unwrap here
+                                    let claims = wascap_claims.iter().map(|wc| {
+                                        let mut values = HashMap::new();
+                                        let metadata = wc.metadata.as_ref().unwrap();
+                                        values.insert("iss".to_string(), wc.issuer.clone());
+                                        values.insert("sub".to_string(), wc.subject.clone());
+                                        if let Some(caps) = &metadata.caps {
+                                            values.insert("caps".to_string(), caps.join(","));
+                                        }
+                                        if let Some(ver) = &metadata.ver {
+                                            values.insert("version".to_string(), format!("{}", ver));
+                                        }
+                                        if let Some(rev) = &metadata.rev {
+                                            values.insert("rev".to_string(), format!("{}", rev));
+                                        }
+                                        Claims {
+                                            values
+                                        }
+                                    }).collect::<Vec<Claims>>();
+                                    crate::ctl::get_claims_output(ClaimsList { claims }, &output_kind)
                                 }
                                 Link {
                                     actor_id,

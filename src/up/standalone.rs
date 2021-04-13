@@ -14,7 +14,9 @@ pub(crate) enum HostCommand {
         output_kind: OutputKind,
     },
     GetInventory {},
-    GetClaims {},
+    GetClaims {
+        output_kind: OutputKind,
+    },
     Link {
         actor_id: String,
         provider_id: String,
@@ -65,7 +67,9 @@ impl From<CtlCliCommand> for HostCommand {
                 output_kind: cmd.output.kind,
             },
             Get(GetCommand::HostInventory(_cmd)) => HostCommand::GetInventory {},
-            Get(GetCommand::Claims(_cmd)) => HostCommand::GetClaims {},
+            Get(GetCommand::Claims(cmd)) => HostCommand::GetClaims {
+                output_kind: cmd.output.kind,
+            },
             Start(StartCommand::Actor(cmd)) => HostCommand::StartActor {
                 actor_ref: cmd.actor_ref,
                 output_kind: cmd.output.kind,
