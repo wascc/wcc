@@ -2,7 +2,7 @@ extern crate wasmcloud_control_interface;
 use crate::util::{format_output, OutputKind, WASH_CMD_INFO};
 use log::debug;
 use serde_json::json;
-use term_table::{row::Row, table_cell::*, Table, TableStyle};
+use term_table::{row::Row, table_cell::*, Table};
 use wasmcloud_control_interface::*;
 
 // Helper output functions, used to ensure consistent output between ctl & standalone commands
@@ -159,7 +159,7 @@ pub(crate) fn stop_provider_output(
 pub(crate) fn hosts_table(hosts: Vec<Host>, max_width: Option<usize>) -> String {
     let mut table = Table::new();
     table.max_column_width = max_width.unwrap_or(80);
-    table.style = TableStyle::blank();
+    table.style = crate::util::empty_table_style();
     table.separate_rows = false;
 
     table.add_row(Row::new(vec![
@@ -180,7 +180,7 @@ pub(crate) fn hosts_table(hosts: Vec<Host>, max_width: Option<usize>) -> String 
 pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>) -> String {
     let mut table = Table::new();
     table.max_column_width = max_width.unwrap_or(80);
-    table.style = TableStyle::blank();
+    table.style = crate::util::empty_table_style();
     table.separate_rows = false;
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
@@ -275,7 +275,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>)
 /// Helper function to print a ClaimsList to stdout as a table
 pub(crate) fn claims_table(list: ClaimsList, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    table.style = TableStyle::blank();
+    table.style = crate::util::empty_table_style();
     table.separate_rows = false;
     table.max_column_width = max_width.unwrap_or(80);
 

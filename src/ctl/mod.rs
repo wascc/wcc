@@ -201,7 +201,7 @@ pub(crate) struct GetHostInventoryCommand {
 
     /// Id of host
     #[structopt(name = "host-id")]
-    host_id: String,
+    pub(crate) host_id: String,
 }
 
 #[derive(Debug, Clone, StructOpt)]

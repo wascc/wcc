@@ -28,7 +28,7 @@ use structopt::StructOpt;
 use term_table::{
     row::Row,
     table_cell::{Alignment, TableCell},
-    Table, TableStyle,
+    Table,
 };
 use wascap::caps::*;
 use wascap::jwt::{
@@ -842,7 +842,7 @@ where
 {
     let mut table = Table::new();
     table.max_column_width = max_width.unwrap_or(68);
-    table.style = TableStyle::blank();
+    table.style = crate::util::empty_table_style();
     table.separate_rows = false;
     let headline = format!("{} - {}", claims.name(), token_label(&claims.subject));
 

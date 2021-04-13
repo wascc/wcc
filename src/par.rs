@@ -321,11 +321,11 @@ pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<String> {
         OutputKind::Text => {
             use term_table::row::Row;
             use term_table::table_cell::*;
-            use term_table::{Table, TableStyle};
+            use term_table::Table;
 
             let mut table = Table::new();
             table.max_column_width = 68;
-            table.style = TableStyle::blank();
+            table.style = crate::util::empty_table_style();
 
             table.add_row(Row::new(vec![TableCell::new_with_alignment(
                 format!("{} - Provider Archive", metadata.name.unwrap()),

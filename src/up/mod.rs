@@ -25,7 +25,9 @@ use tui::{
     Frame, Terminal,
 };
 use tui_logger::*;
-use wasmcloud_control_interface::{Claims, ClaimsList, Host};
+use wasmcloud_control_interface::{
+    ActorDescription, Claims, ClaimsList, Host, HostInventory, ProviderDescription,
+};
 use wasmcloud_host::HostBuilder;
 
 mod standalone;
@@ -664,37 +666,80 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                         &output_kind,
                                     )
                                 }
-                                GetInventory { } => {
+                                //TODO(brooksmtownsend): not just here, need to kill all teh unwraps and cargo clippy
+                                GetInventory { output_kind } => {
+                                    // OCI references are a map from OCI to pub key, we need the reverse of that
+                                    let oci_refs = host
+                                        .oci_references()
+                                        .await
+                                        .unwrap_or_else(|_| HashMap::new());
+                                    let oci_refs = oci_refs
+                                        .iter()
+                                        .map(|(k, v)| (v, k))
+                                        .collect::<HashMap<_, _>>();
                                     let actors = host
                                         .actors()
-                                        .await.unwrap().join("\n  ");
+                                        .await
+                                        .unwrap()
+                                        .iter()
+                                        .map(|a| ActorDescription {
+                                            id: a.to_string(),
+                                            image_ref: oci_refs.get(a).cloned().cloned(),
+                                        })
+                                        .collect::<Vec<ActorDescription>>();
                                     let providers = host
                                         .providers()
-                                        .await.unwrap().join("\n  ");
-                                    warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
-                                    format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)
+                                        .await
+                                        .unwrap()
+                                        .iter()
+                                        .map(|p| ProviderDescription {
+                                            id: p.to_string(),
+                                            image_ref: oci_refs.get(p).cloned().cloned(),
+                                            link_name: "IDK".to_string(),
+                                        })
+                                        .collect::<Vec<ProviderDescription>>();
+                                    let labels = host.labels().await;
+                                    // warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
+                                    // format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)
+                                    crate::ctl::get_host_inventory_output(
+                                        HostInventory {
+                                            actors,
+                                            providers,
+                                            labels,
+                                            host_id: host.id(),
+                                        },
+                                        &output_kind,
+                                    )
                                 }
                                 GetClaims { output_kind } => {
-                                    let wascap_claims = host.actor_claims().await.unwrap();//TODO: no unwrap here
-                                    let claims = wascap_claims.iter().map(|wc| {
-                                        let mut values = HashMap::new();
-                                        let metadata = wc.metadata.as_ref().unwrap();
-                                        values.insert("iss".to_string(), wc.issuer.clone());
-                                        values.insert("sub".to_string(), wc.subject.clone());
-                                        if let Some(caps) = &metadata.caps {
-                                            values.insert("caps".to_string(), caps.join(","));
-                                        }
-                                        if let Some(ver) = &metadata.ver {
-                                            values.insert("version".to_string(), format!("{}", ver));
-                                        }
-                                        if let Some(rev) = &metadata.rev {
-                                            values.insert("rev".to_string(), format!("{}", rev));
-                                        }
-                                        Claims {
-                                            values
-                                        }
-                                    }).collect::<Vec<Claims>>();
-                                    crate::ctl::get_claims_output(ClaimsList { claims }, &output_kind)
+                                    let wascap_claims = host.actor_claims().await.unwrap(); //TODO: no unwrap here
+                                    let claims = wascap_claims
+                                        .iter()
+                                        .map(|wc| {
+                                            let mut values = HashMap::new();
+                                            let metadata = wc.metadata.as_ref().unwrap();
+                                            values.insert("iss".to_string(), wc.issuer.clone());
+                                            values.insert("sub".to_string(), wc.subject.clone());
+                                            if let Some(caps) = &metadata.caps {
+                                                values.insert("caps".to_string(), caps.join(","));
+                                            }
+                                            if let Some(ver) = &metadata.ver {
+                                                values.insert(
+                                                    "version".to_string(),
+                                                    format!("{}", ver),
+                                                );
+                                            }
+                                            if let Some(rev) = &metadata.rev {
+                                                values
+                                                    .insert("rev".to_string(), format!("{}", rev));
+                                            }
+                                            Claims { values }
+                                        })
+                                        .collect::<Vec<Claims>>();
+                                    crate::ctl::get_claims_output(
+                                        ClaimsList { claims },
+                                        &output_kind,
+                                    )
                                 }
                                 Link {
                                     actor_id,
@@ -1073,8 +1118,8 @@ fn draw_output_panel(
         )))
         .style(Style::default().fg(Color::White))
         .alignment(Alignment::Left)
-        .scroll((state.output_scroll, 0))
-        .wrap(Wrap { trim: false });
+        .scroll((state.output_scroll, 0));
+    // .wrap(Wrap { trim: false });
     frame.render_widget(output_panel, chunk);
 }
 

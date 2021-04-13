@@ -6,6 +6,7 @@ use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use structopt::StructOpt;
+use term_table::TableStyle;
 
 pub(crate) type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
@@ -130,5 +131,21 @@ pub(crate) fn output_destination() -> OutputDestination {
     match REPL_MODE.get() {
         Some(_) => OutputDestination::REPL,
         None => OutputDestination::CLI,
+    }
+}
+
+pub(crate) fn empty_table_style() -> TableStyle {
+    TableStyle {
+        top_left_corner: ' ',
+        top_right_corner: ' ',
+        bottom_left_corner: ' ',
+        bottom_right_corner: ' ',
+        outer_left_vertical: ' ',
+        outer_right_vertical: ' ',
+        outer_bottom_horizontal: ' ',
+        outer_top_horizontal: ' ',
+        intersection: ' ',
+        vertical: ' ',
+        horizontal: ' ',
     }
 }
