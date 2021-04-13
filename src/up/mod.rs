@@ -379,7 +379,7 @@ impl WashRepl {
                             ReplCliCommand::Claims(claimscmd) => {
                                 let output_state = Arc::clone(&self.output_state);
                                 std::thread::spawn(|| {
-                                    let mut rt = actix_rt::System::new("cmd");
+                                    let rt = actix_rt::System::new();
                                     rt.block_on(async {
                                         match handle_claims(claimscmd, output_state).await {
                                             Ok(r) => r,
@@ -395,7 +395,7 @@ impl WashRepl {
                                     sender.send(ctlcmd)?
                                 } else {
                                     std::thread::spawn(|| {
-                                        let mut rt = actix_rt::System::new("cmd");
+                                        let rt = actix_rt::System::new();
                                         rt.block_on(async {
                                             match handle_ctl(ctlcmd, output_state).await {
                                                 Ok(r) => r,
@@ -408,7 +408,7 @@ impl WashRepl {
                             ReplCliCommand::Keys(keyscmd) => {
                                 let output_state = Arc::clone(&self.output_state);
                                 std::thread::spawn(|| {
-                                    let mut rt = actix_rt::System::new("cmd");
+                                    let rt = actix_rt::System::new();
                                     rt.block_on(async {
                                         match handle_keys(keyscmd, output_state).await {
                                             Ok(r) => r,
@@ -420,7 +420,7 @@ impl WashRepl {
                             ReplCliCommand::Par(parcmd) => {
                                 let output_state = Arc::clone(&self.output_state);
                                 std::thread::spawn(|| {
-                                    let mut rt = actix_rt::System::new("cmd");
+                                    let rt = actix_rt::System::new();
                                     rt.block_on(async {
                                         match handle_par(parcmd, output_state).await {
                                             Ok(r) => r,
@@ -432,7 +432,7 @@ impl WashRepl {
                             ReplCliCommand::Reg(regcmd) => {
                                 let output_state = Arc::clone(&self.output_state);
                                 std::thread::spawn(|| {
-                                    let mut rt = actix_rt::System::new("cmd");
+                                    let rt = actix_rt::System::new();
                                     rt.block_on(async {
                                         match handle_reg(regcmd, output_state).await {
                                             Ok(r) => r,
@@ -569,7 +569,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     // Channel for host output (in standalone mode)
     let (host_output_sender, host_output_receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut rt = actix_rt::System::new("replhost");
+        let rt = actix_rt::System::new();
         rt.block_on(async move {
             let nats_connection =
                 nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
@@ -673,7 +673,10 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     warn!(target: WASH_CMD_INFO, "Retrieving host inventory is only partially supported in standalone mode");
                                     format!("Host ID\n  {}\nActors\n  {}\nProviders\n  {}", host.id(), actors, providers)
                                 }
-                                GetClaims {} => "Retrieving claims is not currently supported in standalone mode".to_string(),
+                                GetClaims {} => {
+                                    // let claims = host.get_claims();
+                                    "Retrieving claims is not currently supported in standalone mode".to_string()
+                                }
                                 Link {
                                     actor_id,
                                     provider_id,
@@ -759,7 +762,7 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                             };
                             host_output_sender.send(output).unwrap();
                         } else {
-                            actix_rt::time::delay_for(std::time::Duration::from_millis(100)).await;
+                            actix_rt::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
                     }
                 }
