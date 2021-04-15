@@ -674,36 +674,40 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     )
                                 }
                                 GetInventory { output_kind } => {
-                                    // OCI references are a map from OCI to pub key, we need the reverse of that
-                                    let oci_refs = host
-                                        .oci_references()
-                                        .await
-                                        .unwrap_or_else(|_| HashMap::new());
-                                    let oci_refs = oci_refs
-                                        .iter()
-                                        .map(|(k, v)| (v, k))
-                                        .collect::<HashMap<_, _>>();
-                                    let actors = host
-                                        .actors()
-                                        .await
-                                        .unwrap_or_else(|_| vec![])
-                                        .iter()
-                                        .map(|a| ActorDescription {
-                                            id: a.to_string(),
-                                            image_ref: oci_refs.get(a).cloned().cloned(),
-                                        })
-                                        .collect::<Vec<ActorDescription>>();
-                                    let providers = host
-                                        .providers()
-                                        .await
-                                        .unwrap_or_else(|_| vec![])
-                                        .iter()
-                                        .map(|p| ProviderDescription {
-                                            id: p.to_string(),
-                                            image_ref: oci_refs.get(p).cloned().cloned(),
-                                            link_name: "unknown".to_string(),
-                                        })
-                                        .collect::<Vec<ProviderDescription>>();
+                                    let mut actors: Vec<ActorDescription> = vec![];
+                                    // This is a for loop instead of utilizing an iter/map/collect chain
+                                    // because you cannot call `await` within an iterator's closure
+                                    for a in host.actors().await.unwrap_or_else(|_| vec![]) {
+                                        if let Ok((image_ref, name, revision)) =
+                                            host.get_actor_identity(&a).await
+                                        {
+                                            actors.push(ActorDescription {
+                                                id: a.clone(),
+                                                image_ref,
+                                                name: Some(name),
+                                                revision,
+                                            })
+                                        }
+                                    }
+
+                                    let mut providers: Vec<ProviderDescription> = vec![];
+                                    for (id, _, link_name) in
+                                        host.providers().await.unwrap_or_else(|_| vec![])
+                                    {
+                                        if let Ok((image_ref, name, revision)) = host
+                                            .get_provider_identity(&id, Some(link_name.clone()))
+                                            .await
+                                        {
+                                            providers.push(ProviderDescription {
+                                                id: id.clone(),
+                                                link_name,
+                                                image_ref,
+                                                name: Some(name),
+                                                revision,
+                                            })
+                                        }
+                                    }
+
                                     let labels = host.labels().await;
                                     crate::ctl::get_host_inventory_output(
                                         HostInventory {
@@ -834,7 +838,7 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     output_kind,
                                 } => {
                                     // If the actor is not local, we have to download it from the OCI registry
-                                    //TODO: need connection parameters
+                                    // Providing OCI authentication parameters here will depend on https://github.com/wasmCloud/wasmCloud/issues/158
                                     let actor_bytes = if new_oci_ref.is_some() && bytes.is_empty() {
                                         info!("Downloading new actor module for update");
                                         crate::reg::pull_artifact(
