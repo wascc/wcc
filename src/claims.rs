@@ -759,7 +759,7 @@ pub(crate) fn render_actor_claims(
         .unwrap_or_else(|| "(Not set)".to_string());
 
     match output.kind {
-        OutputKind::JSON => {
+        OutputKind::Json => {
             let iss_label = token_label(&claims.issuer).to_ascii_lowercase();
             let sub_label = token_label(&claims.subject).to_ascii_lowercase();
             let provider_json = provider.replace(" ", "_").to_ascii_lowercase();
@@ -1110,7 +1110,7 @@ mod test {
                 assert_eq!(metadata.common.expires_in_days.unwrap(), 3);
                 assert_eq!(metadata.common.not_before_days.unwrap(), 1);
                 assert!(metadata.common.disable_keygen);
-                assert_eq!(metadata.common.output.kind, OutputKind::JSON);
+                assert_eq!(metadata.common.output.kind, OutputKind::Json);
                 assert!(metadata.keyvalue);
                 assert!(metadata.msg_broker);
                 assert!(metadata.http_server);
@@ -1183,7 +1183,7 @@ mod test {
                 assert_eq!(metadata.common.expires_in_days.unwrap(), 3);
                 assert_eq!(metadata.common.not_before_days.unwrap(), 1);
                 assert!(metadata.common.disable_keygen);
-                assert_eq!(metadata.common.output.kind, OutputKind::JSON);
+                assert_eq!(metadata.common.output.kind, OutputKind::Json);
                 assert!(metadata.keyvalue);
                 assert!(metadata.msg_broker);
                 assert!(metadata.http_server);
@@ -1262,7 +1262,7 @@ mod test {
                     NBFR.parse::<u64>().unwrap()
                 );
                 assert!(common.disable_keygen);
-                assert_eq!(common.output.kind, OutputKind::JSON);
+                assert_eq!(common.output.kind, OutputKind::Json);
                 assert_eq!(issuer.unwrap(), OPERATOR_KEY);
                 assert_eq!(subject.unwrap(), ACCOUNT_KEY);
                 let adds = additional_signing_keys.unwrap();
@@ -1339,7 +1339,7 @@ mod test {
                     NBFR.parse::<u64>().unwrap()
                 );
                 assert!(common.disable_keygen);
-                assert_eq!(common.output.kind, OutputKind::JSON);
+                assert_eq!(common.output.kind, OutputKind::Json);
                 assert_eq!(issuer.unwrap(), ACCOUNT_KEY);
                 assert_eq!(subject.unwrap(), ACTOR_KEY);
                 assert!(keyvalue);
@@ -1399,7 +1399,7 @@ mod test {
                     NBFR.parse::<u64>().unwrap()
                 );
                 assert!(common.disable_keygen);
-                assert_eq!(common.output.kind, OutputKind::JSON);
+                assert_eq!(common.output.kind, OutputKind::Json);
                 assert_eq!(issuer.unwrap(), OPERATOR_KEY);
                 let adds = additional_signing_keys.unwrap();
                 assert_eq!(adds.len(), 1);
@@ -1459,7 +1459,7 @@ mod test {
                     NBFR.parse::<u64>().unwrap()
                 );
                 assert!(common.disable_keygen);
-                assert_eq!(common.output.kind, OutputKind::JSON);
+                assert_eq!(common.output.kind, OutputKind::Json);
                 assert_eq!(issuer.unwrap(), ACCOUNT_KEY);
                 assert_eq!(subject.unwrap(), PROVIDER_KEY);
                 assert_eq!(capid, "wasmcloud:test");

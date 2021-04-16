@@ -33,7 +33,7 @@ use wasmcloud_host::HostBuilder;
 mod standalone;
 use standalone::HostCommand;
 
-type REPLTermionBackend =
+type ReplTermionBackend =
     tui::backend::TermionBackend<AlternateScreen<RawTerminal<std::io::Stdout>>>;
 
 const CTL_NS: &str = "default";
@@ -248,7 +248,7 @@ impl Default for WashRepl {
 
 impl WashRepl {
     /// Using the state of the REPL, display information in the terminal window
-    fn draw_ui(&mut self, terminal: &mut Terminal<REPLTermionBackend>) -> Result<()> {
+    fn draw_ui(&mut self, terminal: &mut Terminal<ReplTermionBackend>) -> Result<()> {
         terminal.draw(|frame| {
             let main_chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -733,10 +733,8 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                                 values.insert("caps".to_string(), caps.join(","));
                                             }
                                             if let Some(ver) = &metadata.ver {
-                                                values.insert(
-                                                    "version".to_string(),
-                                                    format!("{}", ver),
-                                                );
+                                                values
+                                                    .insert("version".to_string(), ver.to_string());
                                             }
                                             if let Some(rev) = &metadata.rev {
                                                 values
@@ -1009,7 +1007,7 @@ async fn handle_reg(reg_cmd: RegCliCommand, output_state: Arc<Mutex<OutputState>
 }
 
 /// Helper function to exit the alternate tui terminal without corrupting the user terminal
-fn cleanup_terminal(terminal: &mut Terminal<REPLTermionBackend>) {
+fn cleanup_terminal(terminal: &mut Terminal<ReplTermionBackend>) {
     terminal.show_cursor().unwrap();
     terminal.clear().unwrap();
 }
@@ -1063,7 +1061,7 @@ fn format_input_for_display(input_vec: Vec<char>, input_width: usize) -> String 
 }
 
 /// Display the wash REPL in the provided panel, automatically scroll with overflow
-fn draw_input_panel(frame: &mut Frame<REPLTermionBackend>, state: &mut InputState, chunk: Rect) {
+fn draw_input_panel(frame: &mut Frame<ReplTermionBackend>, state: &mut InputState, chunk: Rect) {
     let history: String = state
         .history
         .iter()
@@ -1123,7 +1121,7 @@ fn draw_input_panel(frame: &mut Frame<REPLTermionBackend>, state: &mut InputStat
 
 /// Display command output in the provided panel
 fn draw_output_panel(
-    frame: &mut Frame<REPLTermionBackend>,
+    frame: &mut Frame<ReplTermionBackend>,
     state: Arc<Mutex<OutputState>>,
     chunk: Rect,
     focused: bool,
@@ -1166,7 +1164,7 @@ fn draw_output_panel(
 
 /// Draws the Tui smart logger widget in the provided frame
 fn draw_smart_logger(
-    frame: &mut Frame<REPLTermionBackend>,
+    frame: &mut Frame<ReplTermionBackend>,
     chunk: Rect,
     state: &TuiWidgetState,
     focused: bool,

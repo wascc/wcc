@@ -300,7 +300,7 @@ pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<String> {
     let metadata = claims.metadata.unwrap();
 
     let output = match cmd.output.kind {
-        OutputKind::JSON => {
+        OutputKind::Json => {
             let friendly_rev = if metadata.rev.is_some() {
                 format!("{}", metadata.rev.unwrap())
             } else {
@@ -556,7 +556,7 @@ mod test {
                 assert_eq!(directory.unwrap(), "./tests/fixtures");
                 assert_eq!(issuer.unwrap(), ISSUER);
                 assert_eq!(subject.unwrap(), SUBJECT);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(name, "CreateTest");
                 assert_eq!(vendor, "TestRunner");
                 assert_eq!(destination.unwrap(), "./test.par.gz");
@@ -695,7 +695,7 @@ mod test {
                 assert!(!insecure);
                 assert_eq!(user.unwrap(), "name");
                 assert_eq!(password.unwrap(), "secret");
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
             }
             cmd => panic!("par inspect constructed incorrect command {:?}", cmd),
         }
@@ -731,7 +731,7 @@ mod test {
                 assert!(insecure);
                 assert_eq!(user.unwrap(), "name");
                 assert_eq!(password.unwrap(), "secret");
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
             }
             cmd => panic!("par inspect constructed incorrect command {:?}", cmd),
         }

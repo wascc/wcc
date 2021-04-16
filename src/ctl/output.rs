@@ -29,21 +29,21 @@ pub(crate) fn get_hosts_output(hosts: Vec<Host>, output_kind: &OutputKind) -> St
     debug!(target: WASH_CMD_INFO, "Hosts:{:?}", hosts);
     match output_kind {
         OutputKind::Text => hosts_table(hosts, None),
-        OutputKind::JSON => format!("{}", json!({ "hosts": hosts })),
+        OutputKind::Json => format!("{}", json!({ "hosts": hosts })),
     }
 }
 pub(crate) fn get_host_inventory_output(inv: HostInventory, output_kind: &OutputKind) -> String {
     debug!(target: WASH_CMD_INFO, "Inventory:{:?}", inv);
     match output_kind {
         OutputKind::Text => host_inventory_table(inv, None),
-        OutputKind::JSON => format!("{}", json!({ "inventory": inv })),
+        OutputKind::Json => format!("{}", json!({ "inventory": inv })),
     }
 }
 pub(crate) fn get_claims_output(claims: ClaimsList, output_kind: &OutputKind) -> String {
     debug!(target: WASH_CMD_INFO, "Claims:{:?}", claims);
     match output_kind {
         OutputKind::Text => claims_table(claims, None),
-        OutputKind::JSON => format!("{}", json!({ "claims": claims })),
+        OutputKind::Json => format!("{}", json!({ "claims": claims })),
     }
 }
 pub(crate) fn link_output(
@@ -163,7 +163,7 @@ pub(crate) fn update_actor_output(
     if let Some(e) = error {
         format_output(
             format!("\nError updating actor: {}", e),
-            json!({ "error": format!("{}", e) }),
+            json!({ "error": e }),
             output_kind,
         )
     } else {

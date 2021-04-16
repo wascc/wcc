@@ -611,7 +611,7 @@ fn update_spinner_message(
     if let Some(sp) = spinner {
         sp.message(msg);
         Some(sp)
-    } else if output.kind == OutputKind::Text && output_destination() == OutputDestination::CLI {
+    } else if output.kind == OutputKind::Text && output_destination() == OutputDestination::Cli {
         Some(Spinner::new(Spinners::Dots12, msg))
     } else {
         None
@@ -664,7 +664,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(actor_id, ACTOR_ID);
                 assert_eq!(operation, "HandleOperation");
                 assert_eq!(data, vec!["{ \"hello\": \"world\"}".to_string()])
@@ -706,7 +706,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(host_id.unwrap(), HOST_ID.to_string());
                 assert_eq!(actor_ref, "wasmcloud.azurecr.io/actor:v1".to_string());
                 assert_eq!(constraints.unwrap(), vec!["arch=x86_64".to_string()]);
@@ -752,7 +752,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(link_name, "default".to_string());
                 assert_eq!(constraints.unwrap(), vec!["arch=x86_64".to_string()]);
                 assert_eq!(host_id.unwrap(), HOST_ID.to_string());
@@ -789,7 +789,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(host_id, HOST_ID.to_string());
                 assert_eq!(actor_id, ACTOR_ID.to_string());
             }
@@ -827,7 +827,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(host_id, HOST_ID.to_string());
                 assert_eq!(provider_id, PROVIDER_ID.to_string());
                 assert_eq!(link_name, "default".to_string());
@@ -862,7 +862,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(timeout, 5);
             }
             cmd => panic!("ctl get hosts constructed incorrect command {:?}", cmd),
@@ -893,7 +893,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(host_id, HOST_ID.to_string());
             }
             cmd => panic!("ctl get inventory constructed incorrect command {:?}", cmd),
@@ -919,7 +919,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
             }
             cmd => panic!("ctl get claims constructed incorrect command {:?}", cmd),
         }
@@ -957,7 +957,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(actor_id, ACTOR_ID.to_string());
                 assert_eq!(provider_id, PROVIDER_ID.to_string());
                 assert_eq!(contract_id, "wasmcloud:provider".to_string());
@@ -996,7 +996,7 @@ mod test {
                 assert_eq!(opts.rpc_port, RPC_PORT);
                 assert_eq!(opts.ns_prefix, NS_PREFIX);
                 assert_eq!(opts.rpc_timeout, 1);
-                assert_eq!(output.kind, OutputKind::JSON);
+                assert_eq!(output.kind, OutputKind::Json);
                 assert_eq!(host_id, HOST_ID.to_string());
                 assert_eq!(actor_id, ACTOR_ID.to_string());
                 assert_eq!(new_actor_ref, "wasmcloud.azurecr.io/actor:v2".to_string());

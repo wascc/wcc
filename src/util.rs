@@ -31,14 +31,14 @@ pub(crate) struct Output {
 #[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputKind {
     Text,
-    JSON,
+    Json,
 }
 
 /// Used to supress `println!` macro calls in the REPL
 #[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputDestination {
-    CLI,
-    REPL,
+    Cli,
+    Repl,
 }
 
 impl Default for Output {
@@ -54,7 +54,7 @@ impl FromStr for OutputKind {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "json" => Ok(OutputKind::JSON),
+            "json" => Ok(OutputKind::Json),
             "text" => Ok(OutputKind::Text),
             _ => Err(OutputParseErr),
         }
@@ -83,7 +83,7 @@ pub(crate) fn format_output(
 ) -> String {
     match output_kind {
         OutputKind::Text => text,
-        OutputKind::JSON => format!("{}", json),
+        OutputKind::Json => format!("{}", json),
     }
 }
 
@@ -120,8 +120,8 @@ pub(crate) fn json_str_to_msgpack_bytes(payload: Vec<String>) -> Result<Vec<u8>>
 /// Helper function to either display input to stdout or log the output in the REPL
 pub(crate) fn print_or_log(output: String) {
     match output_destination() {
-        OutputDestination::REPL => info!(target: WASH_LOG_INFO, "{}", output),
-        OutputDestination::CLI => println!("{}", output),
+        OutputDestination::Repl => info!(target: WASH_LOG_INFO, "{}", output),
+        OutputDestination::Cli => println!("{}", output),
     }
 }
 
@@ -129,8 +129,8 @@ pub(crate) fn print_or_log(output: String) {
 pub(crate) fn output_destination() -> OutputDestination {
     // REPL_MODE is Some("true") when in REPL, otherwise CLI
     match REPL_MODE.get() {
-        Some(_) => OutputDestination::REPL,
-        None => OutputDestination::CLI,
+        Some(_) => OutputDestination::Repl,
+        None => OutputDestination::Cli,
     }
 }
 
