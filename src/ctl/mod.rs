@@ -222,7 +222,7 @@ pub(crate) struct StartActorCommand {
 
     /// Id of host, if omitted the actor will be auctioned in the lattice to find a suitable host
     #[structopt(short = "h", long = "host-id", name = "host-id")]
-    host_id: Option<String>,
+    pub(crate) host_id: Option<String>,
 
     /// Actor reference, e.g. the OCI URL for the actor
     #[structopt(name = "actor-ref")]

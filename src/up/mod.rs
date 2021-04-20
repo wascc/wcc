@@ -5,10 +5,14 @@ use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
 use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
-use log::{error, info, warn, LevelFilter};
+use log::{debug, error, info, warn, LevelFilter};
 use std::collections::HashMap;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::{
+    mpsc::{channel, Sender},
+    Arc, Mutex,
+};
 use structopt::{clap::AppSettings, StructOpt};
 use termion::event::{Event, Key};
 use termion::{
@@ -28,7 +32,7 @@ use tui_logger::*;
 use wasmcloud_control_interface::{
     ActorDescription, Claims, ClaimsList, Host, HostInventory, ProviderDescription,
 };
-use wasmcloud_host::HostBuilder;
+use wasmcloud_host::{Actor, HostBuilder};
 
 mod standalone;
 use standalone::HostCommand;
@@ -84,6 +88,11 @@ pub(crate) struct UpCliCommand {
     /// Log level verbosity, valid values are `error`, `warn`, `info`, `debug`, and `trace`
     #[structopt(short = "l", long = "log-level", default_value = "debug")]
     log_level: LogLevel,
+
+    /// Watch a signed actor module, loading it into the embedded REPL host and updating it
+    /// if the file changes
+    #[structopt(short = "w", long = "watch")]
+    signed_actor: Option<PathBuf>,
 }
 
 #[derive(StructOpt, Debug, Clone, PartialEq)]
@@ -228,11 +237,34 @@ impl Default for OutputState {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ReplMode {
+    Standalone,
+    Lattice,
+}
+
+#[derive(Debug, Clone)]
+struct EmbeddedHost {
+    id: String,
+    mode: ReplMode,
+    op_sender: Sender<CtlCliCommand>,
+}
+
+impl EmbeddedHost {
+    fn new(id: String, mode: ReplMode, op_sender: Sender<CtlCliCommand>) -> Self {
+        EmbeddedHost {
+            id,
+            mode,
+            op_sender,
+        }
+    }
+}
+
 struct WashRepl {
     input_state: InputState,
     output_state: Arc<Mutex<OutputState>>,
     tui_state: TuiWidgetState,
-    host_op_sender: Option<std::sync::mpsc::Sender<CtlCliCommand>>,
+    embedded_host: Option<EmbeddedHost>,
 }
 
 impl Default for WashRepl {
@@ -241,7 +273,7 @@ impl Default for WashRepl {
             input_state: InputState::default(),
             output_state: Arc::new(Mutex::new(OutputState::default())),
             tui_state: TuiWidgetState::new(),
-            host_op_sender: None,
+            embedded_host: None,
         }
     }
 }
@@ -394,8 +426,23 @@ impl WashRepl {
                             ReplCliCommand::Ctl(ctlcmd) => {
                                 let output_state = Arc::clone(&self.output_state);
                                 // If an event sender exists, host is running in standalone mode and should receive the `ctl` command
-                                if let Some(sender) = &self.host_op_sender {
-                                    sender.send(ctlcmd)?
+                                //TODO(brooksmtownsend): EmbeddedHost struct with sender, type, id
+
+                                // We want to load a local actor in the following scenarios:
+                                // PREREQ: command is a start actor command
+                                // PREREQ: embedded host is running
+                                // IN LATTICE MODE: if host ID equals the embedded host, and actor ref is a file, attempt to load and start it
+                                // STANDALONE: If host is running, and the actor ref is a file, attempt to load and start it
+                                if let CtlCliCommand::Start(StartCommand::Actor(cmd)) =
+                                    ctlcmd.clone()
+                                {
+                                    //TODO: handle embedded host not existing
+                                    let host = self.embedded_host.as_ref().unwrap();
+                                    //TODO: handle host ID not existing by providing embedded host id IF the reference is a file
+                                    //TODO: if the reference is not a file, don't return and instead dispatch as usual to ctl IF IN LATTICE MODE
+                                    if cmd.host_id.is_some() && cmd.host_id.unwrap() == host.id {
+                                        host.op_sender.send(ctlcmd)?
+                                    }
                                 } else {
                                     std::thread::spawn(|| {
                                         let rt = actix_rt::System::new();
@@ -566,79 +613,88 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     repl.tui_state.transition(&TuiWidgetEvent::SpaceKey);
     repl.draw_ui(&mut terminal)?;
 
-    // Launch host in separate thread to avoid blocking host operations
     // Channel for host operations (in standalone mode)
-    let (host_op_sender, host_op_receiver) = std::sync::mpsc::channel();
+    let (host_op_sender, host_op_receiver) = channel();
     // Channel for host output (in standalone mode)
-    let (host_output_sender, host_output_receiver) = std::sync::mpsc::channel();
+    let (host_output_sender, host_output_receiver) = channel();
+
+    let nats_connection = nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
+    let common_host = HostBuilder::new()
+        .with_namespace(CTL_NS)
+        .with_label("repl_mode", "true")
+        .oci_allow_latest()
+        .oci_allow_insecure(vec!["localhost:5000".to_string()])
+        .enable_live_updates();
+    let (mode, host) = match nats_connection {
+        // Launch a lattice-connected host
+        Ok(conn) => (
+            ReplMode::Lattice,
+            common_host
+                .with_rpc_client(conn.clone())
+                .with_control_client(conn)
+                .with_label("lattice_connected", "true")
+                .build(),
+        ),
+        // Launch a self-contained (e.g. not lattice connected) host
+        Err(_) => (
+            ReplMode::Standalone,
+            common_host.with_label("lattice_connected", "false").build(),
+        ),
+    };
+
+    repl.embedded_host = Some(EmbeddedHost::new(host.id(), mode, host_op_sender));
+
+    // Move host to separate thread to avoid blocking host operations
     std::thread::spawn(move || {
         let rt = actix_rt::System::new();
         rt.block_on(async move {
-            let nats_connection =
-                nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
-            match nats_connection {
-                // Launch a lattice-connected host
-                Ok(conn) => {
-                    let host = HostBuilder::new()
-                        .with_namespace(CTL_NS)
-                        .with_rpc_client(conn.clone())
-                        .with_control_client(conn)
-                        .with_label("repl_mode", "true")
-                        .with_label("lattice_connected", "true")
-                        .oci_allow_latest()
-                        .oci_allow_insecure(vec!["localhost:5000".to_string()])
-                        .enable_live_updates()
-                        .build();
-                    if let Err(_e) = host.start().await.map_err(convert_error) {
-                        error!(target: WASH_LOG_INFO, "Error launching REPL host");
-                    } else {
-                        info!(
-                            target: WASH_LOG_INFO,
-                            "Host ({}) started in namespace ({})",
-                            host.id(),
-                            CTL_NS
-                        );
-                        host_output_sender.send(REPL_LATTICE.to_string()).unwrap();
-                        drop(host_output_sender);
-                    };
-                    // Since CTRL+C won't be captured by this thread, host will stop when REPL exits
-                    actix_rt::signal::ctrl_c().await.unwrap();
-                    host.stop().await;
+            if let Err(e) = host.start().await.map_err(convert_error) {
+                error!(target: WASH_LOG_INFO, "Error launching REPL host: {}", e);
+            } else {
+                info!(
+                    target: WASH_LOG_INFO,
+                    "Host ({}) started in namespace ({})", host.id(), CTL_NS
+                );
+            };
+            match mode {
+                ReplMode::Lattice => {
+                    loop {
+                        if let Ok(start_cmd) = host_op_receiver.try_recv() {
+                            //TODO: try to clean this up, we should only reach here if this is the embedded host AND it's a local file
+                            debug!("Attempting to load actor from file");
+                            if let CtlCliCommand::Start(StartCommand::Actor(cmd)) = start_cmd {
+                                let failure = match Actor::from_file(cmd.actor_ref.clone()) {
+                                    Ok(actor) => host.start_actor(actor).await,
+                                    Err(file_err) => {
+                                        debug!("Actor failed to load from file, {}, trying from registry", file_err);
+                                        if let Err(_reg_err) = host.start_actor_from_registry(&cmd.actor_ref).await {
+                                            Err("Actor was not found as a file or an OCI reference".into())
+                                        } else {
+                                            debug!("Successfully loaded actor from registry");
+                                            Ok(())
+                                        }
+                                    },
+                                }
+                                .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                host_output_sender.send(start_actor_output(
+                                    &cmd.actor_ref,
+                                    &host.id(),
+                                    failure,
+                                    &cmd.output.kind,
+                                )).unwrap()
+                            } else {
+                                ()
+                            }
+                        } else {
+                            actix_rt::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+                    }
                 }
-                // Launch a self-contained (e.g. not lattice connected) host
-                Err(_) => {
-                    let host = HostBuilder::new()
-                        .with_namespace(CTL_NS)
-                        .with_label("repl_mode", "true")
-                        .with_label("lattice_connected", "false")
-                        .oci_allow_latest()
-                        .oci_allow_insecure(vec!["localhost:5000".to_string()])
-                        .enable_live_updates()
-                        .build();
-                    if let Err(_e) = host.start().await.map_err(convert_error) {
-                        error!(target: WASH_LOG_INFO, "Error launching local REPL host");
-                    } else {
-                        warn!(
-                            target: WASH_CMD_INFO,
-                            "Unable to connect to NATS at {}:{}
-refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how to configure NATS",
-                            cmd.rpc_host,
-                            cmd.rpc_port
-                        );
-                        warn!(
-                            target: WASH_CMD_INFO,
-                            "Host started without a lattice connection"
-                        );
-                        info!(
-                            target: WASH_LOG_INFO,
-                            "Host ({}) started in namespace ({})",
-                            host.id(),
-                            CTL_NS
-                        );
-                        host_output_sender
-                            .send(REPL_STANDALONE.to_string())
-                            .unwrap();
-                    };
+                ReplMode::Standalone => {
+                    warn!(
+                        target: WASH_CMD_INFO,
+                        "Host started without a lattice connection"
+                    );
                     let host_started = std::time::Instant::now();
                     // Await commands without blocking the host from operating
                     loop {
@@ -775,11 +831,20 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                                     actor_ref,
                                     output_kind,
                                 } => {
-                                    //TODO(issue #105): allow starting actors from disk, should allow it in `ctl` module too
-                                    let failure = host
-                                        .start_actor_from_registry(&actor_ref)
-                                        .await
-                                        .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                    debug!("Attempting to load actor from file");
+                                    let failure = match Actor::from_file(actor_ref.clone()) {
+                                        Ok(actor) => host.start_actor(actor).await,
+                                        Err(file_err) => {
+                                            debug!("Actor failed to load from file, {}, trying from registry", file_err);
+                                            if let Err(_reg_err) = host.start_actor_from_registry(&actor_ref).await {
+                                                Err("Actor was not found as a file or an OCI reference".into())
+                                            } else {
+                                                debug!("Successfully loaded actor from registry");
+                                                Ok(())
+                                            }
+                                        },
+                                    }
+                                    .map_or_else(|e| Some(format!("{}", e)), |_| None);
                                     start_actor_output(
                                         &actor_ref,
                                         &host.id(),
@@ -871,7 +936,7 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
                     }
                 }
             }
-        });
+        })
     });
     repl.draw_ui(&mut terminal)?;
 
@@ -887,20 +952,9 @@ refer to https://wasmcloud.dev/overview/getting-started/ for instructions on how
     });
 
     // Set REPL title to the corresponding host mode (Standalone / Lattice)
-    repl.input_state.title = match host_output_receiver.recv() {
-        Ok(title) if title == REPL_STANDALONE => {
-            // Allow REPL to send events to host in separate thread
-            repl.host_op_sender = Some(host_op_sender);
-            title
-        }
-        Ok(title) => title,
-        Err(_) => {
-            error!(
-                target: WASH_CMD_INFO,
-                "Failed to initialize host within REPL"
-            );
-            "no host".to_string()
-        }
+    repl.input_state.title = match mode {
+        ReplMode::Lattice => REPL_LATTICE.to_string(),
+        ReplMode::Standalone => REPL_STANDALONE.to_string(),
     };
 
     // Main REPL event loop
@@ -1198,6 +1252,9 @@ fn draw_smart_logger(
     set_level_for_target("polling::kqueue", LevelFilter::Off);
     set_level_for_target("async_io::driver", LevelFilter::Off);
     set_level_for_target("async_io::reactor", LevelFilter::Off);
+    // When downloading a resource from an OCI registry, these debug log for each chunk downloaded
+    set_level_for_target("reqwest::connect", LevelFilter::Info);
+    set_level_for_target("hyper::client::connect::dns", LevelFilter::Info);
 
     frame.render_widget(selector_panel, chunk);
 }
@@ -1223,9 +1280,20 @@ mod test {
             RPC_HOST,
             "--port",
             RPC_PORT,
+            "--watch",
+            "test_actor_s.wasm",
         ])?;
-        let up_all_short_options =
-            UpCli::from_iter_safe(&["up", "-l", LOG_LEVEL, "-h", RPC_HOST, "-p", RPC_PORT])?;
+        let up_all_short_options = UpCli::from_iter_safe(&[
+            "up",
+            "-l",
+            LOG_LEVEL,
+            "-h",
+            RPC_HOST,
+            "-p",
+            RPC_PORT,
+            "-w",
+            "test_actor_s.wasm",
+        ])?;
 
         #[allow(unreachable_patterns)]
         match up_all_options.command {
@@ -1233,10 +1301,12 @@ mod test {
                 rpc_host,
                 rpc_port,
                 log_level,
+                signed_actor,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
+                assert!(signed_actor.is_some());
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
@@ -1247,10 +1317,12 @@ mod test {
                 rpc_host,
                 rpc_port,
                 log_level,
+                signed_actor,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
+                assert!(signed_actor.is_some());
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
