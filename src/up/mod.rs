@@ -8,7 +8,6 @@ use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use log::{debug, error, info, warn, LevelFilter};
 use std::collections::HashMap;
 use std::io;
-use std::path::PathBuf;
 use std::sync::{
     mpsc::{channel, Sender},
     Arc, Mutex,
@@ -86,13 +85,8 @@ pub(crate) struct UpCliCommand {
     rpc_port: String,
 
     /// Log level verbosity, valid values are `error`, `warn`, `info`, `debug`, and `trace`
-    #[structopt(short = "l", long = "log-level", default_value = "debug")]
+    #[structopt(short = "l", long = "log-level", default_value = "info")]
     log_level: LogLevel,
-
-    /// Watch a signed actor module, loading it into the embedded REPL host and updating it
-    /// if the file changes
-    #[structopt(short = "w", long = "watch")]
-    signed_actor: Option<PathBuf>,
 }
 
 #[derive(StructOpt, Debug, Clone, PartialEq)]
@@ -237,7 +231,7 @@ impl Default for OutputState {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ReplMode {
     Standalone,
     Lattice,
@@ -424,36 +418,42 @@ impl WashRepl {
                                 });
                             }
                             ReplCliCommand::Ctl(ctlcmd) => {
-                                let output_state = Arc::clone(&self.output_state);
-                                // If an event sender exists, host is running in standalone mode and should receive the `ctl` command
-                                //TODO(brooksmtownsend): EmbeddedHost struct with sender, type, id
-
-                                // We want to load a local actor in the following scenarios:
-                                // PREREQ: command is a start actor command
-                                // PREREQ: embedded host is running
-                                // IN LATTICE MODE: if host ID equals the embedded host, and actor ref is a file, attempt to load and start it
-                                // STANDALONE: If host is running, and the actor ref is a file, attempt to load and start it
-                                if let CtlCliCommand::Start(StartCommand::Actor(cmd)) =
-                                    ctlcmd.clone()
-                                {
-                                    //TODO: handle embedded host not existing
-                                    let host = self.embedded_host.as_ref().unwrap();
-                                    //TODO: handle host ID not existing by providing embedded host id IF the reference is a file
-                                    //TODO: if the reference is not a file, don't return and instead dispatch as usual to ctl IF IN LATTICE MODE
-                                    if cmd.host_id.is_some() && cmd.host_id.unwrap() == host.id {
-                                        host.op_sender.send(ctlcmd)?
+                                // This match statement handles loading an actor from disk instead of from an OCI registry
+                                //
+                                // When a StartActor `ctl` command is sent, we send the `ctl` command to the host API for the following cases:
+                                // 1. The Host is running in standalone mode (all ctl commands are delegated to host API)
+                                // 2. The actor_ref exists as a file on disk AND:
+                                //    a. The host ID specified is the embedded host
+                                //    b. The host ID is not specified (the embedded host is a suitable host for a local actor)
+                                match (self.embedded_host.as_ref(), ctlcmd.clone()) {
+                                    (
+                                        Some(host),
+                                        CtlCliCommand::Start(StartCommand::Actor(cmd)),
+                                    ) if host.mode == ReplMode::Lattice => {
+                                        if std::fs::metadata(&cmd.actor_ref).is_ok() // File exists
+                                                && (cmd.host_id.is_none()
+                                                    || cmd.host_id.unwrap() == host.id)
+                                        {
+                                            host.op_sender.send(ctlcmd)?;
+                                            return Ok(());
+                                        }
                                     }
-                                } else {
-                                    std::thread::spawn(|| {
-                                        let rt = actix_rt::System::new();
-                                        rt.block_on(async {
-                                            match handle_ctl(ctlcmd, output_state).await {
-                                                Ok(r) => r,
-                                                Err(e) => error!("Error handling ctl: {}", e),
-                                            };
-                                        });
-                                    });
+                                    (Some(host), cmd) if host.mode == ReplMode::Standalone => {
+                                        host.op_sender.send(cmd)?;
+                                        return Ok(());
+                                    }
+                                    _ => debug!("Dispatching command to lattice control interface (actor not found locally)"),
                                 }
+                                let output_state = Arc::clone(&self.output_state);
+                                std::thread::spawn(|| {
+                                    let rt = actix_rt::System::new();
+                                    rt.block_on(async {
+                                        match handle_ctl(ctlcmd, output_state).await {
+                                            Ok(r) => r,
+                                            Err(e) => error!("Error handling ctl: {}", e),
+                                        };
+                                    });
+                                });
                             }
                             ReplCliCommand::Keys(keyscmd) => {
                                 let output_state = Arc::clone(&self.output_state);
@@ -613,9 +613,9 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     repl.tui_state.transition(&TuiWidgetEvent::SpaceKey);
     repl.draw_ui(&mut terminal)?;
 
-    // Channel for host operations (in standalone mode)
+    // Channel for host operations
     let (host_op_sender, host_op_receiver) = channel();
-    // Channel for host output (in standalone mode)
+    // Channel for host output
     let (host_output_sender, host_output_receiver) = channel();
 
     let nats_connection = nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
@@ -659,32 +659,24 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
             match mode {
                 ReplMode::Lattice => {
                     loop {
-                        if let Ok(start_cmd) = host_op_receiver.try_recv() {
-                            //TODO: try to clean this up, we should only reach here if this is the embedded host AND it's a local file
+                        // The lattice mode REPL host will only invoke the host API when starting an actor from disk
+                        // All other operations are done via the control interface
+                        if let Ok(CtlCliCommand::Start(StartCommand::Actor(cmd))) = host_op_receiver.try_recv() {
                             debug!("Attempting to load actor from file");
-                            if let CtlCliCommand::Start(StartCommand::Actor(cmd)) = start_cmd {
-                                let failure = match Actor::from_file(cmd.actor_ref.clone()) {
-                                    Ok(actor) => host.start_actor(actor).await,
-                                    Err(file_err) => {
-                                        debug!("Actor failed to load from file, {}, trying from registry", file_err);
-                                        if let Err(_reg_err) = host.start_actor_from_registry(&cmd.actor_ref).await {
-                                            Err("Actor was not found as a file or an OCI reference".into())
-                                        } else {
-                                            debug!("Successfully loaded actor from registry");
-                                            Ok(())
-                                        }
-                                    },
-                                }
-                                .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                host_output_sender.send(start_actor_output(
-                                    &cmd.actor_ref,
-                                    &host.id(),
-                                    failure,
-                                    &cmd.output.kind,
-                                )).unwrap()
-                            } else {
-                                ()
+                            let failure = match Actor::from_file(cmd.actor_ref.clone()) {
+                                Ok(actor) => host.start_actor(actor).await,
+                                Err(file_err) => {
+                                    error!("Failed to load actor from file: {}", file_err);
+                                    Err(file_err)
+                                },
                             }
+                            .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                            host_output_sender.send(start_actor_output(
+                                &cmd.actor_ref,
+                                &host.id(),
+                                failure,
+                                &cmd.output.kind,
+                            )).unwrap()
                         } else {
                             actix_rt::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
@@ -693,7 +685,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                 ReplMode::Standalone => {
                     warn!(
                         target: WASH_CMD_INFO,
-                        "Host started without a lattice connection"
+                        "REPL host started in standalone mode and is not connected to a lattice"
                     );
                     let host_started = std::time::Instant::now();
                     // Await commands without blocking the host from operating
@@ -837,7 +829,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         Err(file_err) => {
                                             debug!("Actor failed to load from file, {}, trying from registry", file_err);
                                             if let Err(_reg_err) = host.start_actor_from_registry(&actor_ref).await {
-                                                Err("Actor was not found as a file or an OCI reference".into())
+                                                Err("Actor reference was not a valid file or OCI reference".into())
                                             } else {
                                                 debug!("Successfully loaded actor from registry");
                                                 Ok(())
@@ -857,7 +849,6 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                     link_name,
                                     output_kind,
                                 } => {
-                                    // TODO(issue #105): allow starting providers from disk, should allow it in `ctl` module too
                                     let failure = host
                                         .start_capability_from_registry(
                                             &provider_ref,
@@ -1252,9 +1243,6 @@ fn draw_smart_logger(
     set_level_for_target("polling::kqueue", LevelFilter::Off);
     set_level_for_target("async_io::driver", LevelFilter::Off);
     set_level_for_target("async_io::reactor", LevelFilter::Off);
-    // When downloading a resource from an OCI registry, these debug log for each chunk downloaded
-    set_level_for_target("reqwest::connect", LevelFilter::Info);
-    set_level_for_target("hyper::client::connect::dns", LevelFilter::Info);
 
     frame.render_widget(selector_panel, chunk);
 }
@@ -1280,20 +1268,9 @@ mod test {
             RPC_HOST,
             "--port",
             RPC_PORT,
-            "--watch",
-            "test_actor_s.wasm",
         ])?;
-        let up_all_short_options = UpCli::from_iter_safe(&[
-            "up",
-            "-l",
-            LOG_LEVEL,
-            "-h",
-            RPC_HOST,
-            "-p",
-            RPC_PORT,
-            "-w",
-            "test_actor_s.wasm",
-        ])?;
+        let up_all_short_options =
+            UpCli::from_iter_safe(&["up", "-l", LOG_LEVEL, "-h", RPC_HOST, "-p", RPC_PORT])?;
 
         #[allow(unreachable_patterns)]
         match up_all_options.command {
@@ -1301,12 +1278,10 @@ mod test {
                 rpc_host,
                 rpc_port,
                 log_level,
-                signed_actor,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
-                assert!(signed_actor.is_some());
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
@@ -1317,12 +1292,10 @@ mod test {
                 rpc_host,
                 rpc_port,
                 log_level,
-                signed_actor,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
-                assert!(signed_actor.is_some());
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
