@@ -898,7 +898,7 @@ mod test {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
-                assert_eq!(manifest, Some("mani.yaml"));
+                assert_eq!(manifest.unwrap().to_str().unwrap(), "mani.yaml");
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
@@ -914,7 +914,7 @@ mod test {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
-                assert_eq!(manifest, Some("mani.yaml"));
+                assert_eq!(manifest.unwrap().to_str().unwrap(), "mani.yaml");
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
