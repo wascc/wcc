@@ -9,7 +9,6 @@ use tui::{
     layout::{Constraint, Direction, Layout},
     Terminal,
 };
-use tui_logger::*;
 
 type ReplTermionBackend =
     tui::backend::TermionBackend<AlternateScreen<RawTerminal<std::io::Stdout>>>;

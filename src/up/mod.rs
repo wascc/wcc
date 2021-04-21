@@ -8,6 +8,7 @@ use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use log::{debug, error, info, warn, LevelFilter};
 use std::collections::HashMap;
 use std::io;
+use std::path::PathBuf;
 use std::sync::{mpsc::channel, Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
 use termion::event::{Event, Key};
@@ -28,7 +29,7 @@ use tui_logger::*;
 use wasmcloud_control_interface::{
     ActorDescription, Claims, ClaimsList, Host, HostInventory, ProviderDescription,
 };
-use wasmcloud_host::{Actor, HostBuilder};
+use wasmcloud_host::{Actor, HostBuilder, HostManifest};
 mod standalone;
 use standalone::HostCommand;
 mod repl;
@@ -84,6 +85,10 @@ pub(crate) struct UpCliCommand {
     /// Log level verbosity, valid values are `error`, `warn`, `info`, `debug`, and `trace`
     #[structopt(short = "l", long = "log-level", default_value = "info")]
     log_level: LogLevel,
+
+    /// Specifies a manifest file to apply to the host once started
+    #[structopt(long = "manifest", short = "m", parse(from_os_str))]
+    manifest: Option<PathBuf>,
 }
 
 #[derive(StructOpt, Debug, Clone, PartialEq)]
@@ -238,6 +243,19 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                     "Host ({}) started in namespace ({})", host.id(), CTL_NS
                 );
             };
+            // If supplied, initialize the host with a manifest
+            if let Some(pb) = cmd.manifest {
+                match HostManifest::from_path(pb.clone(), true) {
+                    Ok(hm) => {
+                        host_output_sender.send("Initializing host from manifest ...".to_string()).unwrap();
+                        host.apply_manifest(hm).await.unwrap();
+                        host_output_sender.send("Successfully initialized host from manifest".to_string()).unwrap();
+                    },
+                    Err(e) => {
+                        error!("Failed to load and apply manifest: {}", e);
+                    }
+                }
+            }
             match mode {
                 ReplMode::Lattice => {
                     loop {
@@ -854,9 +872,20 @@ mod test {
             RPC_HOST,
             "--port",
             RPC_PORT,
+            "--manifest",
+            "mani.yaml",
         ])?;
-        let up_all_short_options =
-            UpCli::from_iter_safe(&["up", "-l", LOG_LEVEL, "-h", RPC_HOST, "-p", RPC_PORT])?;
+        let up_all_short_options = UpCli::from_iter_safe(&[
+            "up",
+            "-l",
+            LOG_LEVEL,
+            "-h",
+            RPC_HOST,
+            "-p",
+            RPC_PORT,
+            "-m",
+            "mani.yaml",
+        ])?;
 
         #[allow(unreachable_patterns)]
         match up_all_options.command {
@@ -864,10 +893,12 @@ mod test {
                 rpc_host,
                 rpc_port,
                 log_level,
+                manifest,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
+                assert_eq!(manifest, Some("mani.yaml"));
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
@@ -878,10 +909,12 @@ mod test {
                 rpc_host,
                 rpc_port,
                 log_level,
+                manifest,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
+                assert_eq!(manifest, Some("mani.yaml"));
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
