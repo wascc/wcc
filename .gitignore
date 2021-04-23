@@ -11,3 +11,4 @@
 *.par
 *.par.gz
 *.gz
+flake.lock
