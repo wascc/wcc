@@ -245,15 +245,19 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
             };
             // If supplied, initialize the host with a manifest
             if let Some(pb) = cmd.manifest {
-                match HostManifest::from_path(pb.clone(), true) {
+                let err = match HostManifest::from_path(pb.clone(), true) {
                     Ok(hm) => {
                         host_output_sender.send("Initializing host from manifest ...".to_string()).unwrap();
-                        host.apply_manifest(hm).await.unwrap();
-                        host_output_sender.send("Successfully initialized host from manifest".to_string()).unwrap();
+                        host.apply_manifest(hm).await.err()
                     },
                     Err(e) => {
-                        error!("Failed to load and apply manifest: {}", e);
+                        Some(e)
                     }
+                };
+                if let Some(e) = err {
+                    error!("Failed to load and apply manifest: {}", e);
+                } else {
+                    host_output_sender.send("Successfully initialized host from manifest".to_string()).unwrap();
                 }
             }
             match mode {
