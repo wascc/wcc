@@ -21,7 +21,6 @@ pub(crate) struct InputState {
     pub(crate) history_cursor: usize,
     pub(crate) input: Vec<char>,
     pub(crate) input_cursor: usize,
-    pub(crate) multiline_history: u16, // amount to offset cursor for multiline inputs
     pub(crate) input_width: usize,
     pub(crate) focused: bool,
     pub(crate) title: String,
@@ -34,7 +33,6 @@ impl Default for InputState {
             history_cursor: 0,
             input: vec![],
             input_cursor: 0,
-            multiline_history: 0,
             input_width: 40,
             focused: true,
             title: REPL_INIT.to_string(),
@@ -57,12 +55,26 @@ impl InputState {
         }
 
         // Offset Y by length of command history and multiline history
-        position.1 += self.history.len();
-        //TODO(issue #90): Multiline history is calculated relative to the current terminal width
-        //                 when a terminal is resized, it needs to be re-evaluated
-        position.1 += self.multiline_history as usize;
+        position.1 += self.vertical_history_offset();
 
         (position.0 as u16, position.1 as u16)
+    }
+
+    /// Computes vertical offset from command history
+    pub(crate) fn vertical_history_offset(&self) -> u16 {
+        let input_width = self.input_width;
+        self.history
+            .iter()
+            .map(|h| {
+                let input_length = h.len() + WASH_PROMPT.len();
+                let multilines = input_length / input_width;
+                if multilines >= 1 && input_length != input_width {
+                    1_u16 + multilines as u16
+                } else {
+                    1_u16
+                }
+            })
+            .fold(0_u16, |acc, el| acc + el)
     }
 }
 
@@ -225,11 +237,6 @@ impl WashRepl {
                 let cmd: String = self.input_state.input.iter().collect();
                 let iter = cmd.split_ascii_whitespace();
                 let cli = ReplCli::from_iter_safe(iter);
-
-                let multilines = self.input_state.input.len() / self.input_state.input_width;
-                if multilines >= 1 {
-                    self.input_state.multiline_history += multilines as u16;
-                };
 
                 self.input_state
                     .history
