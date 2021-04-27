@@ -19,8 +19,10 @@ const REPL_INIT: &str = " REPL (Initializing...) ";
 pub(crate) struct InputState {
     pub(crate) history: Vec<Vec<char>>,
     pub(crate) history_cursor: usize,
+    pub(crate) history_offset: u16,
     pub(crate) input: Vec<char>,
     pub(crate) input_cursor: usize,
+    pub(crate) prev_width: usize,
     pub(crate) input_width: usize,
     pub(crate) focused: bool,
     pub(crate) title: String,
@@ -31,8 +33,10 @@ impl Default for InputState {
         InputState {
             history: vec![],
             history_cursor: 0,
+            history_offset: 0,
             input: vec![],
             input_cursor: 0,
+            prev_width: 40, // Used to indicate resizes
             input_width: 40,
             focused: true,
             title: REPL_INIT.to_string(),
@@ -41,7 +45,7 @@ impl Default for InputState {
 }
 
 impl InputState {
-    pub(crate) fn cursor_location(&self) -> (u16, u16) {
+    pub(crate) fn cursor_location(&mut self) -> (u16, u16) {
         let mut position = (0, 0);
 
         position.0 += WASH_PROMPT.len();
@@ -60,21 +64,28 @@ impl InputState {
         (position.0 as u16, position.1 as u16)
     }
 
-    /// Computes vertical offset from command history
-    pub(crate) fn vertical_history_offset(&self) -> u16 {
-        let input_width = self.input_width;
-        self.history
+    /// Computes vertical offset from command history, storing the
+    /// result in `history_offset` to avoid unnecessary future computation
+    pub(crate) fn vertical_history_offset(&mut self) -> u16 {
+        if self.prev_width == self.input_width {
+            return self.history_offset;
+        }
+        // Recompute history_offset
+        self.prev_width = self.input_width;
+        self.history_offset = self
+            .history
             .iter()
             .map(|h| {
                 let input_length = h.len() + WASH_PROMPT.len();
-                let multilines = input_length / input_width;
-                if multilines >= 1 && input_length != input_width {
+                let multilines = input_length / self.input_width;
+                if multilines >= 1 && input_length != self.input_width {
                     1_u16 + multilines as u16
                 } else {
                     1_u16
                 }
             })
-            .fold(0_u16, |acc, el| acc + el)
+            .fold(0_u16, |acc, el| acc + el);
+        self.history_offset
     }
 }
 
