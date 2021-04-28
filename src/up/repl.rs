@@ -84,7 +84,7 @@ impl InputState {
                     1_u16
                 }
             })
-            .fold(0_u16, |acc, el| acc + el);
+            .sum();
         self.history_offset
     }
 }
