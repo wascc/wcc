@@ -1,5 +1,6 @@
 use super::*;
-use crate::util::{Result, WASH_CMD_INFO, WASH_LOG_INFO};
+use crate::ctl::{StartActorCommand, UpdateActorCommand};
+use crate::util::{Output, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use log::{debug, error, info};
 use std::sync::{mpsc::Sender, Arc, Mutex};
 use structopt::StructOpt;
@@ -120,6 +121,32 @@ impl EmbeddedHost {
             mode,
             op_sender,
         }
+    }
+
+    pub(crate) fn watch_actor(&self, actor_ref: &str) -> Result<()> {
+        // need to then monitor that actor, waiting for changes.
+        // when a change occurs, construct update ctl command
+
+        let start_cmd = CtlCliCommand::Start(StartCommand::Actor(StartActorCommand::new(
+            ConnectionOpts::default(),
+            Output::default(),
+            Some(self.id.to_string()),
+            actor_ref.to_string(),
+            None,
+            1,
+        )));
+        self.op_sender.send(start_cmd)?;
+
+        let update_cmd = CtlCliCommand::Update(UpdateCommand::Actor(UpdateActorCommand::new(
+            ConnectionOpts::default(),
+            Output::default(),
+            self.id.to_string(),
+            actor_ref.to_string(),
+            "MADQAFWOOOCZFDKYEYHC7AUQKDJTP32XUC5TDSMN4JLTDTU2WXBVPG4G".to_string(),
+        )));
+        self.op_sender.send(update_cmd)?;
+
+        Ok(())
     }
 }
 

@@ -8,6 +8,7 @@ use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use log::{debug, error, info, warn, LevelFilter};
 use std::collections::HashMap;
 use std::io;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::{mpsc::channel, Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
@@ -89,6 +90,11 @@ pub(crate) struct UpCliCommand {
     /// Specifies a manifest file to apply to the host once started
     #[structopt(long = "manifest", short = "m", parse(from_os_str))]
     manifest: Option<PathBuf>,
+
+    //TODO(brooksmtownsend): Allow multiple actors
+    /// Specify a signed actor module to watch and update upon changes
+    #[structopt(long = "watch", short = "w", parse(from_os_str))]
+    actor: Option<PathBuf>,
 }
 
 #[derive(StructOpt, Debug, Clone, PartialEq)]
@@ -229,7 +235,14 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
         ),
     };
 
-    repl.embedded_host = Some(EmbeddedHost::new(host.id(), mode, host_op_sender));
+    let embedded_host = EmbeddedHost::new(host.id(), mode, host_op_sender);
+    //TODO(brooksmtownsend): Will need to replace with vec logic
+    if let Some(actor_path) = cmd.actor.clone() {
+        if let Some(actor_ref) = actor_path.to_str() {
+            embedded_host.watch_actor(actor_ref)?;
+        }
+    }
+    repl.embedded_host = Some(embedded_host);
 
     // Move host to separate thread to avoid blocking host operations
     std::thread::spawn(move || {
@@ -263,6 +276,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
             match mode {
                 ReplMode::Lattice => {
                     loop {
+                        //TODO(brooksmtownsend): handle update actor commands here too
                         // The lattice mode REPL host will only invoke the host API when starting an actor from disk
                         // All other operations are done via the control interface
                         if let Ok(CtlCliCommand::Start(StartCommand::Actor(cmd))) = host_op_receiver.try_recv() {
@@ -491,16 +505,22 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                 }
                                 UpdateActor {
                                     actor_id,
-                                    new_oci_ref,
-                                    bytes,
+                                    new_actor_ref,
                                     output_kind,
                                 } => {
                                     // If the actor is not local, we have to download it from the OCI registry
                                     // Providing OCI authentication parameters here will depend on https://github.com/wasmCloud/wasmCloud/issues/158
-                                    let actor_bytes = if new_oci_ref.is_some() && bytes.is_empty() {
+
+                                    // actor_bytes are required regardless to update an actor, but the actor reference is only an OCI reference
+                                    // if we use it to download the image from an OCI registry.
+                                    let (oci_ref, actor_bytes) = if let Ok(mut actor_bytes) = std::fs::File::open(new_actor_ref.clone()) {
+                                        let mut buf = Vec::new();
+                                        let _ = actor_bytes.read_to_end(&mut buf);
+                                        (None, buf)
+                                    } else {
                                         info!("Downloading new actor module for update");
-                                        crate::reg::pull_artifact(
-                                            new_oci_ref.clone().unwrap(),
+                                        (Some(new_actor_ref.clone()), crate::reg::pull_artifact(
+                                            new_actor_ref.clone(),
                                             None,
                                             false,
                                             None,
@@ -508,17 +528,15 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                             false,
                                         )
                                         .await
-                                        .unwrap_or_else(|_| vec![])
-                                    } else {
-                                        bytes
+                                        .unwrap_or_else(|_| vec![]))
                                     };
+
                                     let ack = host
-                                        .update_actor(&actor_id, new_oci_ref.clone(), &actor_bytes)
+                                        .update_actor(&actor_id, oci_ref.clone(), &actor_bytes)
                                         .await;
                                     update_actor_output(
                                         &actor_id,
-                                        &new_oci_ref
-                                            .unwrap_or_else(|| "New local version".to_string()),
+                                        &new_actor_ref.to_string(),
                                         ack.map_or_else(|e| Some(format!("{}", e)), |_| None),
                                         &output_kind,
                                     )
@@ -551,7 +569,6 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
         ReplMode::Lattice => REPL_LATTICE.to_string(),
         ReplMode::Standalone => REPL_STANDALONE.to_string(),
     };
-
     // Main REPL event loop
     loop {
         // If any output is sent by a non-lattice connected host, log to output
@@ -895,6 +912,7 @@ mod test {
             "mani.yaml",
         ])?;
 
+        //TODO(brooksmtownsend): Test actor appropriately here
         #[allow(unreachable_patterns)]
         match up_all_options.command {
             UpCliCommand {
@@ -902,6 +920,7 @@ mod test {
                 rpc_port,
                 log_level,
                 manifest,
+                ..
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
@@ -918,6 +937,7 @@ mod test {
                 rpc_port,
                 log_level,
                 manifest,
+                ..
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
