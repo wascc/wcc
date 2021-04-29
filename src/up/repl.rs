@@ -311,7 +311,7 @@ impl WashRepl {
                             ReplCliCommand::Ctl(ctlcmd) => {
                                 // This match statement handles loading an actor from disk instead of from an OCI registry
                                 //
-                                // When a StartActor `ctl` command is sent, we send the `ctl` command to the host API for the following cases:
+                                // When a Start or Update Actor `ctl` command is sent, we send the `ctl` command to the host API for the following cases:
                                 // 1. The Host is running in standalone mode (all ctl commands are delegated to host API)
                                 // 2. The actor_ref exists as a file on disk AND:
                                 //    a. The host ID specified is the embedded host
@@ -322,8 +322,19 @@ impl WashRepl {
                                         CtlCliCommand::Start(StartCommand::Actor(cmd)),
                                     ) if host.mode == ReplMode::Lattice => {
                                         if std::fs::metadata(&cmd.actor_ref).is_ok() // File exists
-                                                && (cmd.host_id.is_none()
-                                                    || cmd.host_id.unwrap() == host.id)
+                                            && (cmd.host_id.is_none()
+                                                || cmd.host_id.unwrap() == host.id)
+                                        {
+                                            host.op_sender.send(ctlcmd)?;
+                                            return Ok(());
+                                        }
+                                    }
+                                    (
+                                        Some(host),
+                                        CtlCliCommand::Update(UpdateCommand::Actor(cmd))
+                                    ) if host.mode == ReplMode::Lattice => {
+                                        if std::fs::metadata(&cmd.new_actor_ref).is_ok() // File exists
+                                            && cmd.host_id == host.id
                                         {
                                             host.op_sender.send(ctlcmd)?;
                                             return Ok(());

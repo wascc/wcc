@@ -276,27 +276,45 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
             match mode {
                 ReplMode::Lattice => {
                     loop {
-                        //TODO(brooksmtownsend): handle update actor commands here too
                         // The lattice mode REPL host will only invoke the host API when starting an actor from disk
                         // All other operations are done via the control interface
-                        if let Ok(CtlCliCommand::Start(StartCommand::Actor(cmd))) = host_op_receiver.try_recv() {
-                            debug!("Attempting to load actor from file");
-                            let failure = match Actor::from_file(cmd.actor_ref.clone()) {
-                                Ok(actor) => host.start_actor(actor).await,
-                                Err(file_err) => {
-                                    error!("Failed to load actor from file: {}", file_err);
-                                    Err(file_err)
-                                },
+                        match host_op_receiver.try_recv() {
+                            Ok(CtlCliCommand::Start(StartCommand::Actor(cmd))) => {
+                                debug!("Attempting to load actor from file");
+                                let failure = match Actor::from_file(cmd.actor_ref.clone()) {
+                                    Ok(actor) => host.start_actor(actor).await,
+                                    Err(file_err) => {
+                                        error!("Failed to load actor from file: {}", file_err);
+                                        Err(file_err)
+                                    },
+                                }
+                                .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                host_output_sender.send(start_actor_output(
+                                    &cmd.actor_ref,
+                                    &host.id(),
+                                    failure,
+                                    &cmd.output.kind,
+                                )).unwrap()
                             }
-                            .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                            host_output_sender.send(start_actor_output(
-                                &cmd.actor_ref,
-                                &host.id(),
-                                failure,
-                                &cmd.output.kind,
-                            )).unwrap()
-                        } else {
-                            actix_rt::time::sleep(std::time::Duration::from_millis(100)).await;
+                            Ok(CtlCliCommand::Update(UpdateCommand::Actor(cmd))) => {
+                                debug!("Attempting to load actor from file");
+                                let failure = match std::fs::File::open(cmd.new_actor_ref.clone()) {
+                                    Ok(mut actor) => {
+                                        let mut buf = Vec::new();
+                                        let _ = actor.read_to_end(&mut buf);
+                                        host.update_actor(&cmd.actor_id, None, &buf).await
+                                    },
+                                    Err(file_err) => {
+                                        error!("Failed to load actor from file: {}", file_err);
+                                        Err(file_err.into())
+                                    },
+                                }
+                                .map_or_else(|e| Some(format!("{}", e)), |_| None);
+                                host_output_sender.send(update_actor_output(&cmd.actor_id, &cmd.new_actor_ref, failure, &cmd.output.kind)).unwrap()
+                            }
+                            _ => {
+                                actix_rt::time::sleep(std::time::Duration::from_millis(100)).await;
+                            }
                         }
                     }
                 }

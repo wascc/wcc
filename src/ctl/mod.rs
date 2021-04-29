@@ -349,7 +349,7 @@ pub(crate) struct UpdateActorCommand {
 
     /// Id of host
     #[structopt(name = "host-id")]
-    host_id: String,
+    pub(crate) host_id: String,
 
     /// Actor Id, e.g. the public key for the actor
     #[structopt(name = "actor-id")]
