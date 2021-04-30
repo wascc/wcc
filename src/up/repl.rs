@@ -1,8 +1,11 @@
 use super::*;
 use crate::ctl::{StartActorCommand, UpdateActorCommand};
 use crate::util::{Output, Result, WASH_CMD_INFO, WASH_LOG_INFO};
+use crossbeam_channel::Sender;
+use hotwatch::{Event, Hotwatch};
 use log::{debug, error, info};
-use std::sync::{mpsc::Sender, Arc, Mutex};
+use std::fs::{metadata, File};
+use std::sync::{Arc, Mutex};
 use structopt::StructOpt;
 use termion::event::Key;
 use termion::{raw::RawTerminal, screen::AlternateScreen};
@@ -123,10 +126,7 @@ impl EmbeddedHost {
         }
     }
 
-    pub(crate) fn watch_actor(&self, actor_ref: &str) -> Result<()> {
-        // need to then monitor that actor, waiting for changes.
-        // when a change occurs, construct update ctl command
-
+    pub(crate) fn watch_actor(&self, actor_ref: &str) -> Result<Option<Hotwatch>> {
         let start_cmd = CtlCliCommand::Start(StartCommand::Actor(StartActorCommand::new(
             ConnectionOpts::default(),
             Output::default(),
@@ -137,16 +137,35 @@ impl EmbeddedHost {
         )));
         self.op_sender.send(start_cmd)?;
 
+        let actor = Actor::from_file(&actor_ref).map_err(convert_error)?;
+
+        // Repeated updates with the same actor can re-use the same command
         let update_cmd = CtlCliCommand::Update(UpdateCommand::Actor(UpdateActorCommand::new(
             ConnectionOpts::default(),
             Output::default(),
             self.id.to_string(),
+            actor.public_key(),
             actor_ref.to_string(),
-            "MADQAFWOOOCZFDKYEYHC7AUQKDJTP32XUC5TDSMN4JLTDTU2WXBVPG4G".to_string(),
         )));
-        self.op_sender.send(update_cmd)?;
 
-        Ok(())
+        let op_sender = self.op_sender.clone();
+        let actor_ref = actor_ref.to_string();
+        let mut hotwatch = Hotwatch::new().expect("hotwatch failed to initialize!");
+        hotwatch
+            .watch(actor_ref, move |event: Event| {
+                // Watching for Event::NoticeWrite is faster, but it induces a race condition where
+                // an update _could_ take place _before_ the write has finished.
+                if let Event::Write(_path) = event {
+                    info!(
+                        target: WASH_CMD_INFO,
+                        "Detected actor change for watched actor, updating"
+                    );
+                    let _ = op_sender.send(update_cmd.clone());
+                }
+            })
+            .expect("failed to watch file!");
+
+        Ok(Some(hotwatch))
     }
 }
 
@@ -321,7 +340,7 @@ impl WashRepl {
                                         Some(host),
                                         CtlCliCommand::Start(StartCommand::Actor(cmd)),
                                     ) if host.mode == ReplMode::Lattice => {
-                                        if std::fs::metadata(&cmd.actor_ref).is_ok() // File exists
+                                        if metadata(&cmd.actor_ref).is_ok() // File exists
                                             && (cmd.host_id.is_none()
                                                 || cmd.host_id.unwrap() == host.id)
                                         {
@@ -333,7 +352,7 @@ impl WashRepl {
                                         Some(host),
                                         CtlCliCommand::Update(UpdateCommand::Actor(cmd))
                                     ) if host.mode == ReplMode::Lattice => {
-                                        if std::fs::metadata(&cmd.new_actor_ref).is_ok() // File exists
+                                        if metadata(&cmd.new_actor_ref).is_ok() // File exists
                                             && cmd.host_id == host.id
                                         {
                                             host.op_sender.send(ctlcmd)?;

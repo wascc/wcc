@@ -5,12 +5,14 @@ use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
 use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
+use crossbeam_channel::unbounded;
 use log::{debug, error, info, warn, LevelFilter};
 use std::collections::HashMap;
+use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::{mpsc::channel, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use structopt::{clap::AppSettings, StructOpt};
 use termion::event::{Event, Key};
 use termion::{
@@ -207,9 +209,9 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     repl.draw_ui(&mut terminal)?;
 
     // Channel for host operations
-    let (host_op_sender, host_op_receiver) = channel();
+    let (host_op_sender, host_op_receiver) = unbounded();
     // Channel for host output
-    let (host_output_sender, host_output_receiver) = channel();
+    let (host_output_sender, host_output_receiver) = unbounded();
 
     let nats_connection = nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
     let common_host = HostBuilder::new()
@@ -237,11 +239,15 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
 
     let embedded_host = EmbeddedHost::new(host.id(), mode, host_op_sender);
     //TODO(brooksmtownsend): Will need to replace with vec logic
-    if let Some(actor_path) = cmd.actor.clone() {
+    let hotwatch = if let Some(actor_path) = cmd.actor.clone() {
         if let Some(actor_ref) = actor_path.to_str() {
-            embedded_host.watch_actor(actor_ref)?;
+            embedded_host.watch_actor(actor_ref)
+        } else {
+            Ok(None)
         }
-    }
+    } else {
+        Ok(None)
+    }?;
     repl.embedded_host = Some(embedded_host);
 
     // Move host to separate thread to avoid blocking host operations
@@ -298,7 +304,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                             }
                             Ok(CtlCliCommand::Update(UpdateCommand::Actor(cmd))) => {
                                 debug!("Attempting to load actor from file");
-                                let failure = match std::fs::File::open(cmd.new_actor_ref.clone()) {
+                                let failure = match File::open(cmd.new_actor_ref.clone()) {
                                     Ok(mut actor) => {
                                         let mut buf = Vec::new();
                                         let _ = actor.read_to_end(&mut buf);
@@ -531,7 +537,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
 
                                     // actor_bytes are required regardless to update an actor, but the actor reference is only an OCI reference
                                     // if we use it to download the image from an OCI registry.
-                                    let (oci_ref, actor_bytes) = if let Ok(mut actor_bytes) = std::fs::File::open(new_actor_ref.clone()) {
+                                    let (oci_ref, actor_bytes) = if let Ok(mut actor_bytes) = File::open(new_actor_ref.clone()) {
                                         let mut buf = Vec::new();
                                         let _ = actor_bytes.read_to_end(&mut buf);
                                         (None, buf)
@@ -572,7 +578,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     repl.draw_ui(&mut terminal)?;
 
     // Use a channel to asynchronously receive stdin events
-    let (tui_sender, tui_receiver) = std::sync::mpsc::channel();
+    let (tui_sender, tui_receiver) = unbounded();
     std::thread::spawn({
         let stdin = io::stdin();
         move || {
