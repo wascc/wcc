@@ -4,7 +4,7 @@ use crate::util::{Output, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use crossbeam_channel::Sender;
 use hotwatch::{Event, Hotwatch};
 use log::{debug, error, info};
-use std::fs::{metadata, File};
+use std::fs::metadata;
 use std::sync::{Arc, Mutex};
 use structopt::StructOpt;
 use termion::event::Key;

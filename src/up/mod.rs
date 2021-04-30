@@ -239,7 +239,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
 
     let embedded_host = EmbeddedHost::new(host.id(), mode, host_op_sender);
     //TODO(brooksmtownsend): Will need to replace with vec logic
-    let hotwatch = if let Some(actor_path) = cmd.actor.clone() {
+    let _hotwatch = if let Some(actor_path) = cmd.actor.clone() {
         if let Some(actor_ref) = actor_path.to_str() {
             embedded_host.watch_actor(actor_ref)
         } else {
