@@ -8,7 +8,7 @@ description: |
   Everything from generating signing keys to a fully interactive REPL environment is contained within the subcommands of wash.
   Our goal with wash is to encapsulate our tools into a single binary to make developing WebAssembly with wasmcloud painless and simple.
 grade: devel # TODO: must be 'stable' to release into candidate/stable channels
-confinement: strict
+confinement: classic
 
 apps:
   wash:
