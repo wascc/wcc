@@ -7,9 +7,8 @@ description: |
   wash is a bundle of command line tools that, together, form a comprehensive CLI for wasmcloud development.
   Everything from generating signing keys to a fully interactive REPL environment is contained within the subcommands of wash.
   Our goal with wash is to encapsulate our tools into a single binary to make developing WebAssembly with wasmcloud painless and simple.
-grade: devel # TODO: must be 'stable' to release into candidate/stable channels
+grade: stable
 confinement: classic
-
 apps:
   wash:
     command: bin/wash
