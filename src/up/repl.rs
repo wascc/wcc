@@ -133,17 +133,15 @@ impl EmbeddedHost {
     pub(crate) fn watch_actors(&self, actors: Vec<PathBuf>) -> Vec<Hotwatch> {
         actors
             .iter()
-            .filter_map(|actor| {
-                let path = actor.to_str();
-                if std::fs::metadata(actor).is_ok() && path.is_some() {
-                    match self.watch_actor(path.unwrap()) {
-                        Ok(hw) => Some(hw),
-                        Err(e) => {
-                            error!(target: WASH_CMD_INFO, "Unable to watch actor: {}", e);
-                            None
-                        }
+            .filter_map(|actor| match actor.to_str() {
+                Some(path) if std::fs::metadata(actor).is_ok() => match self.watch_actor(path) {
+                    Ok(hw) => Some(hw),
+                    Err(e) => {
+                        error!(target: WASH_CMD_INFO, "Unable to watch actor: {}", e);
+                        None
                     }
-                } else {
+                },
+                _ => {
                     error!(
                         target: WASH_CMD_INFO,
                         "Unable to watch actor: file does not exist"
