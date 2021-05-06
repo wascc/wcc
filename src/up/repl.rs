@@ -126,7 +126,39 @@ impl EmbeddedHost {
         }
     }
 
-    pub(crate) fn watch_actor(&self, actor_ref: &str) -> Result<Option<Hotwatch>> {
+    /// Issues appropriate `ctl` commands to start the provided actors and create a
+    /// `Hotwatch` object for each of them. This `Hotwatch` object is responsible
+    /// for detecting write events and issuing a `CtlCliCommand::Update` when
+    /// an update occurs
+    pub(crate) fn watch_actors(&self, actors: Vec<PathBuf>) -> Vec<Hotwatch> {
+        actors
+            .iter()
+            .filter_map(|actor| {
+                let path = actor.to_str();
+                if std::fs::metadata(actor).is_ok() && path.is_some() {
+                    match self.watch_actor(path.unwrap()) {
+                        Ok(hw) => Some(hw),
+                        Err(e) => {
+                            error!(target: WASH_CMD_INFO, "Unable to watch actor: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    error!(
+                        target: WASH_CMD_INFO,
+                        "Unable to watch actor: file does not exist"
+                    );
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn watch_actor(&self, actor_ref: &str) -> Result<Hotwatch> {
+        debug!(
+            target: WASH_CMD_INFO,
+            "Attempting to watch actor {}", actor_ref
+        );
         let start_cmd = CtlCliCommand::Start(StartCommand::Actor(StartActorCommand::new(
             ConnectionOpts::default(),
             Output::default(),
@@ -152,20 +184,20 @@ impl EmbeddedHost {
         let actor_ref = actor_ref.to_string();
         let mut hotwatch = Hotwatch::new().expect("hotwatch failed to initialize!");
         hotwatch
-            .watch(actor_ref, move |event: Event| {
+            .watch(actor_ref.clone(), move |event: Event| {
                 // Watching for Event::NoticeWrite is faster, but it induces a race condition where
                 // an update _could_ take place _before_ the write has finished.
                 if let Event::Write(_path) = event {
                     info!(
                         target: WASH_CMD_INFO,
-                        "Detected actor change for watched actor, updating"
+                        "Detected actor change for actor {}, updating", actor_ref
                     );
                     let _ = op_sender.send(update_cmd.clone());
                 }
             })
-            .expect("failed to watch file!");
+            .expect("failed to watch file");
 
-        Ok(Some(hotwatch))
+        Ok(hotwatch)
     }
 }
 

@@ -93,10 +93,9 @@ pub(crate) struct UpCliCommand {
     #[structopt(long = "manifest", short = "m", parse(from_os_str))]
     manifest: Option<PathBuf>,
 
-    //TODO(brooksmtownsend): Allow multiple actors
-    /// Specify a signed actor module to watch and update upon changes
+    /// Specify signed actor modules to watch and update when the module changes
     #[structopt(long = "watch", short = "w", parse(from_os_str))]
-    actor: Option<PathBuf>,
+    actors: Vec<PathBuf>,
 }
 
 #[derive(StructOpt, Debug, Clone, PartialEq)]
@@ -238,17 +237,13 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     };
 
     let embedded_host = EmbeddedHost::new(host.id(), mode, host_op_sender);
-    //TODO(brooksmtownsend): Will need to replace with vec logic
-    // Ownership of the hotwatch object is moved to this thread, where it won't be dropped
-    let _hotwatch = if let Some(actor_path) = cmd.actor.clone() {
-        if let Some(actor_ref) = actor_path.to_str() {
-            embedded_host.watch_actor(actor_ref)
-        } else {
-            Ok(None)
-        }
+    // Ownership of the hotwatch vec is moved to this thread, where it won't be dropped.
+    // If the vec is dropped, the hotwatch objects will no longer watch for write events
+    let _hotwatch = if !cmd.actors.is_empty() {
+        embedded_host.watch_actors(cmd.actors.clone())
     } else {
-        Ok(None)
-    }?;
+        vec![]
+    };
     repl.embedded_host = Some(embedded_host);
 
     // Move host to separate thread to avoid blocking host operations
@@ -264,9 +259,11 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                 );
             };
             // If supplied, initialize the host with a manifest
-            if let Some(pb) = cmd.manifest {
+            if let Some(ref pb) = cmd.manifest {
                 let err = match HostManifest::from_path(pb.clone(), true) {
-                    Ok(hm) => {
+                    Ok(mut hm) => {
+                        // Don't attempt to start watched actors twice
+                        hm.actors.retain(|act| !cmd.actors.contains(&PathBuf::from(act)));
                         host_output_sender.send("Initializing host from manifest ...".to_string()).unwrap();
                         host.apply_manifest(hm).await.err()
                     },
@@ -470,7 +467,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                     let failure = match Actor::from_file(actor_ref.clone()) {
                                         Ok(actor) => host.start_actor(actor).await,
                                         Err(file_err) => {
-                                            debug!("Actor failed to load from file, {}, trying from registry", file_err);
+                                            debug!("Actor failed to load from file: \"{}\". Trying from registry", file_err);
                                             if let Err(_reg_err) = host.start_actor_from_registry(&actor_ref).await {
                                                 Err("Actor reference was not a valid file or OCI reference".into())
                                             } else {
@@ -924,6 +921,8 @@ mod test {
             RPC_PORT,
             "--manifest",
             "mani.yaml",
+            "--watch",
+            "myactor_s.wasm",
         ])?;
         let up_all_short_options = UpCli::from_iter_safe(&[
             "up",
@@ -935,9 +934,10 @@ mod test {
             RPC_PORT,
             "-m",
             "mani.yaml",
+            "--watch",
+            "myactor_s.wasm",
         ])?;
 
-        //TODO(brooksmtownsend): Test actor appropriately here
         #[allow(unreachable_patterns)]
         match up_all_options.command {
             UpCliCommand {
@@ -945,12 +945,13 @@ mod test {
                 rpc_port,
                 log_level,
                 manifest,
-                ..
+                actors,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
                 assert_eq!(manifest.unwrap().to_str().unwrap(), "mani.yaml");
+                assert_eq!(actors, vec![PathBuf::from("myactor_s.wasm")])
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
@@ -962,12 +963,13 @@ mod test {
                 rpc_port,
                 log_level,
                 manifest,
-                ..
+                actors,
             } => {
                 assert_eq!(rpc_host, RPC_HOST);
                 assert_eq!(rpc_port, RPC_PORT);
                 assert_eq!(log_level, LogLevel::Info);
                 assert_eq!(manifest.unwrap().to_str().unwrap(), "mani.yaml");
+                assert_eq!(actors, vec![PathBuf::from("myactor_s.wasm")])
             }
             cmd => panic!("up generated other command {:?}", cmd),
         }
