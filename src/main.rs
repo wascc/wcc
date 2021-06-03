@@ -70,9 +70,15 @@ async fn main() {
     let res = match cli.command {
         CliCommand::Drain(draincmd) => drain::handle_command(draincmd.command()),
         CliCommand::Keys(keyscli) => keys::handle_command(keyscli.command()),
-        CliCommand::Claims(claimscli) => claims::handle_command(claimscli.command()).await,
-        CliCommand::Ctl(ctlcli) => ctl::handle_command(ctlcli.command()).await,
-        CliCommand::Par(parcli) => par::handle_command(parcli.command()).await,
+        CliCommand::Claims(claimscli) => claims::handle_command(claimscli.command())
+            .await
+            .map(|out| out.format(usize::MAX).into()),
+        CliCommand::Ctl(ctlcli) => ctl::handle_command(ctlcli.command())
+            .await
+            .map(|out| out.format(usize::MAX).into()),
+        CliCommand::Par(parcli) => par::handle_command(parcli.command())
+            .await
+            .map(|out| out.format(usize::MAX).into()),
         CliCommand::Reg(regcli) => reg::handle_command(regcli.command()).await,
         CliCommand::Up(upcli) => up::handle_command(upcli.command())
             .await
