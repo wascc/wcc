@@ -1,12 +1,13 @@
 use log::info;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use structopt::StructOpt;
-use term_table::TableStyle;
+use term_table::{Table, TableStyle};
 
 pub(crate) type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
@@ -15,6 +16,10 @@ pub(crate) static REPL_MODE: OnceCell<String> = OnceCell::new();
 
 pub(crate) const WASH_LOG_INFO: &str = "WASH_LOG";
 pub(crate) const WASH_CMD_INFO: &str = "WASH_CMD";
+
+thread_local! {
+    static MAX_TEXT_OUTPUT_WIDTH: Cell<usize> = Cell::new(0);
+}
 
 #[derive(StructOpt, Debug, Copy, Clone, Deserialize, Serialize)]
 pub(crate) struct Output {
@@ -30,7 +35,7 @@ pub(crate) struct Output {
 /// Used for displaying human-readable output vs JSON format
 #[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputKind {
-    Text,
+    Text { max_width: usize },
     Json,
 }
 
@@ -44,7 +49,9 @@ pub(crate) enum OutputDestination {
 impl Default for Output {
     fn default() -> Self {
         Output {
-            kind: OutputKind::Text,
+            kind: OutputKind::Text {
+                max_width: get_max_text_output_width(),
+            },
         }
     }
 }
@@ -55,7 +62,9 @@ impl FromStr for OutputKind {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "json" => Ok(OutputKind::Json),
-            "text" => Ok(OutputKind::Text),
+            "text" => Ok(OutputKind::Text {
+                max_width: get_max_text_output_width(),
+            }),
             _ => Err(OutputParseErr),
         }
     }
@@ -75,6 +84,16 @@ impl fmt::Display for OutputParseErr {
     }
 }
 
+pub(crate) fn set_max_text_output_width(width: usize) {
+    MAX_TEXT_OUTPUT_WIDTH.with(|output_width| {
+        output_width.set(width);
+    });
+}
+
+pub(crate) fn get_max_text_output_width() -> usize {
+    MAX_TEXT_OUTPUT_WIDTH.with(Cell::get)
+}
+
 /// Returns string output for provided output kind
 pub(crate) fn format_output(
     text: String,
@@ -82,7 +101,7 @@ pub(crate) fn format_output(
     output_kind: &OutputKind,
 ) -> String {
     match output_kind {
-        OutputKind::Text => text,
+        OutputKind::Text { .. } => text,
         OutputKind::Json => format!("{}", json),
     }
 }
@@ -134,7 +153,17 @@ pub(crate) fn output_destination() -> OutputDestination {
     }
 }
 
-pub(crate) fn empty_table_style() -> TableStyle {
+pub(crate) fn configure_table_style(table: &mut Table<'_>, columns: usize, max_table_width: usize) {
+    table.max_column_width = if max_table_width > 0 && columns > 0 {
+        (max_table_width - columns) / columns
+    } else {
+        usize::MAX
+    };
+    table.style = empty_table_style();
+    table.separate_rows = false;
+}
+
+fn empty_table_style() -> TableStyle {
     TableStyle {
         top_left_corner: ' ',
         top_right_corner: ' ',
