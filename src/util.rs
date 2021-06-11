@@ -28,13 +28,13 @@ pub(crate) struct Output {
         short = "o",
         long = "output",
         default_value = "text",
-        help = "Specify output format (text or json)"
+        help = "Specify output format (text, json or wide)"
     )]
     pub(crate) kind: OutputKind,
 }
 
 /// Used for displaying human-readable output vs JSON format
-#[derive(StructOpt, Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum OutputKind {
     Text { max_width: usize },
     Json,
@@ -66,6 +66,7 @@ impl FromStr for OutputKind {
             "text" => Ok(OutputKind::Text {
                 max_width: get_max_text_output_width(),
             }),
+            "wide" => Ok(OutputKind::Text { max_width: 0 }),
             _ => Err(OutputParseErr),
         }
     }
@@ -105,6 +106,22 @@ pub(crate) fn format_output(
         OutputKind::Text { .. } => text,
         OutputKind::Json => format!("{}", json),
     }
+}
+
+pub(crate) fn format_ellipsis(id: String, max_width: usize) -> String {
+    if id.len() > max_width {
+        let ellipsis = "...";
+        id.chars()
+            .take(max_width - ellipsis.len())
+            .collect::<String>()
+            + ellipsis
+    } else {
+        id
+    }
+}
+
+pub(crate) fn format_optional(value: Option<String>) -> String {
+    value.unwrap_or_else(|| "N/A".into())
 }
 
 /// Converts error from Send + Sync error to standard error
@@ -163,6 +180,15 @@ pub(crate) fn configure_table_style(table: &mut Table<'_>, columns: usize, max_t
     };
     table.style = empty_table_style();
     table.separate_rows = false;
+}
+
+pub(crate) fn get_max_column_width(table: &Table<'_>, column_index: usize, padding: bool) -> usize {
+    let padding_width = if padding { 2 } else { 0 };
+    *table
+        .max_column_widths
+        .get(&column_index)
+        .unwrap_or(&table.max_column_width)
+        - padding_width
 }
 
 fn empty_table_style() -> TableStyle {
