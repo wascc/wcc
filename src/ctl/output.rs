@@ -1,8 +1,7 @@
 extern crate wasmcloud_control_interface;
-use crate::util::{format_output, OutputKind, OutputWidthFormat, WASH_CMD_INFO};
+use crate::util::{format_output, OutputKind, WASH_CMD_INFO};
 use log::debug;
 use serde_json::json;
-use std::borrow::Cow;
 use term_table::{row::Row, table_cell::*, Table};
 use wasmcloud_control_interface::*;
 
@@ -26,58 +25,25 @@ pub(crate) fn call_output(error: Option<String>, msg: Vec<u8>, output_kind: &Out
         }
     }
 }
-pub(crate) struct HostsOutput {
-    hosts: Vec<Host>,
-    output_kind: OutputKind,
-}
-impl OutputWidthFormat for HostsOutput {
-    fn format(&self, output_width: usize) -> Cow<'_, str> {
-        debug!(target: WASH_CMD_INFO, "Hosts:{:?}", self.hosts);
-        match self.output_kind {
-            OutputKind::Text => hosts_table(&self.hosts, Some(output_width)).into(),
-            OutputKind::Json => format!("{}", json!({ "hosts": self.hosts })).into(),
-        }
+pub(crate) fn get_hosts_output(hosts: Vec<Host>, output_kind: &OutputKind) -> String {
+    debug!(target: WASH_CMD_INFO, "Hosts:{:?}", hosts);
+    match output_kind {
+        OutputKind::Text => hosts_table(hosts, None),
+        OutputKind::Json => format!("{}", json!({ "hosts": hosts })),
     }
 }
-pub(crate) fn get_hosts_output(hosts: Vec<Host>, output_kind: OutputKind) -> HostsOutput {
-    HostsOutput { hosts, output_kind }
-}
-pub(crate) struct HostInventoryOutput {
-    inv: HostInventory,
-    output_kind: OutputKind,
-}
-impl OutputWidthFormat for HostInventoryOutput {
-    fn format(&self, output_width: usize) -> Cow<'_, str> {
-        debug!(target: WASH_CMD_INFO, "Inventory:{:?}", self.inv);
-        match self.output_kind {
-            OutputKind::Text => host_inventory_table(&self.inv, Some(output_width)).into(),
-            OutputKind::Json => format!("{}", json!({ "inventory": self.inv })).into(),
-        }
+pub(crate) fn get_host_inventory_output(inv: HostInventory, output_kind: &OutputKind) -> String {
+    debug!(target: WASH_CMD_INFO, "Inventory:{:?}", inv);
+    match output_kind {
+        OutputKind::Text => host_inventory_table(inv, None),
+        OutputKind::Json => format!("{}", json!({ "inventory": inv })),
     }
 }
-pub(crate) fn get_host_inventory_output(
-    inv: HostInventory,
-    output_kind: OutputKind,
-) -> HostInventoryOutput {
-    HostInventoryOutput { inv, output_kind }
-}
-pub(crate) struct ClaimsOutput {
-    claims: ClaimsList,
-    output_kind: OutputKind,
-}
-impl OutputWidthFormat for ClaimsOutput {
-    fn format(&self, output_width: usize) -> Cow<'_, str> {
-        debug!(target: WASH_CMD_INFO, "Claims:{:?}", self.claims);
-        match self.output_kind {
-            OutputKind::Text => claims_table(&self.claims, Some(output_width)).into(),
-            OutputKind::Json => format!("{}", json!({ "claims": self.claims })).into(),
-        }
-    }
-}
-pub(crate) fn get_claims_output(claims: ClaimsList, output_kind: OutputKind) -> ClaimsOutput {
-    ClaimsOutput {
-        claims,
-        output_kind,
+pub(crate) fn get_claims_output(claims: ClaimsList, output_kind: &OutputKind) -> String {
+    debug!(target: WASH_CMD_INFO, "Claims:{:?}", claims);
+    match output_kind {
+        OutputKind::Text => claims_table(claims, None),
+        OutputKind::Json => format!("{}", json!({ "claims": claims })),
     }
 }
 pub(crate) fn link_output(
@@ -210,9 +176,11 @@ pub(crate) fn update_actor_output(
 }
 
 /// Helper function to print a Host list to stdout as a table
-pub(crate) fn hosts_table(hosts: &[Host], max_width: Option<usize>) -> String {
+pub(crate) fn hosts_table(hosts: Vec<Host>, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    crate::util::configure_table_style(&mut table, 2, max_width.unwrap_or(80));
+    table.max_column_width = max_width.unwrap_or(80);
+    table.style = crate::util::empty_table_style();
+    table.separate_rows = false;
 
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Host ID", 1, Alignment::Left),
@@ -229,9 +197,11 @@ pub(crate) fn hosts_table(hosts: &[Host], max_width: Option<usize>) -> String {
 }
 
 /// Helper function to print a HostInventory to stdout as a table
-pub(crate) fn host_inventory_table(inv: &HostInventory, max_width: Option<usize>) -> String {
+pub(crate) fn host_inventory_table(inv: HostInventory, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    crate::util::configure_table_style(&mut table, 4, max_width.unwrap_or(80));
+    table.max_column_width = max_width.unwrap_or(80);
+    table.style = crate::util::empty_table_style();
+    table.separate_rows = false;
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
         format!("Host Inventory ({})", inv.host_id),
@@ -323,9 +293,11 @@ pub(crate) fn host_inventory_table(inv: &HostInventory, max_width: Option<usize>
 }
 
 /// Helper function to print a ClaimsList to stdout as a table
-pub(crate) fn claims_table(list: &ClaimsList, max_width: Option<usize>) -> String {
+pub(crate) fn claims_table(list: ClaimsList, max_width: Option<usize>) -> String {
     let mut table = Table::new();
-    crate::util::configure_table_style(&mut table, 4, max_width.unwrap_or(80));
+    table.style = crate::util::empty_table_style();
+    table.separate_rows = false;
+    table.max_column_width = max_width.unwrap_or(80);
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
         "Claims",

@@ -4,7 +4,7 @@ use crate::drain::*;
 use crate::keys::*;
 use crate::par::*;
 use crate::reg::*;
-use crate::util::{convert_error, OutputWidthFormat, Result, WASH_CMD_INFO, WASH_LOG_INFO};
+use crate::util::{convert_error, Result, WASH_CMD_INFO, WASH_LOG_INFO};
 use crossbeam_channel::unbounded;
 use log::{debug, error, info, warn, LevelFilter};
 use std::collections::HashMap;
@@ -210,7 +210,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     // Channel for host operations
     let (host_op_sender, host_op_receiver) = unbounded();
     // Channel for host output
-    let (host_output_sender, host_output_receiver) = unbounded::<Box<dyn OutputWidthFormat>>();
+    let (host_output_sender, host_output_receiver) = unbounded();
 
     let nats_connection = nats::asynk::connect(&format!("{}:{}", cmd.rpc_host, cmd.rpc_port)).await;
     let common_host = HostBuilder::new()
@@ -264,7 +264,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                     Ok(mut hm) => {
                         // Don't attempt to start watched actors twice
                         hm.actors.retain(|act| !cmd.actors.contains(&PathBuf::from(act)));
-                        host_output_sender.send(Box::new("Initializing host from manifest ...")).unwrap();
+                        host_output_sender.send("Initializing host from manifest ...".to_string()).unwrap();
                         host.apply_manifest(hm).await.err()
                     },
                     Err(e) => {
@@ -274,7 +274,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                 if let Some(e) = err {
                     error!("Failed to load and apply manifest: {}", e);
                 } else {
-                    host_output_sender.send(Box::new("Successfully initialized host from manifest")).unwrap();
+                    host_output_sender.send("Successfully initialized host from manifest".to_string()).unwrap();
                 }
             }
             match mode {
@@ -293,12 +293,12 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                     },
                                 }
                                 .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                host_output_sender.send(Box::new(start_actor_output(
+                                host_output_sender.send(start_actor_output(
                                     &cmd.actor_ref,
                                     &host.id(),
                                     failure,
                                     &cmd.output.kind,
-                                ))).unwrap()
+                                )).unwrap()
                             }
                             Ok(CtlCliCommand::Update(UpdateCommand::Actor(cmd))) => {
                                 debug!("Attempting to load actor from file");
@@ -314,7 +314,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                     },
                                 }
                                 .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                host_output_sender.send(Box::new(update_actor_output(&cmd.actor_id, &cmd.new_actor_ref, failure, &cmd.output.kind))).unwrap()
+                                host_output_sender.send(update_actor_output(&cmd.actor_id, &cmd.new_actor_ref, failure, &cmd.output.kind)).unwrap()
                             }
                             _ => {
                                 actix_rt::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -332,9 +332,9 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                     loop {
                         if let Ok(ctlcmd) = host_op_receiver.try_recv() {
                             use HostCommand::*;
-                            let output: Box<dyn OutputWidthFormat> = match HostCommand::from(ctlcmd) {
+                            let output = match HostCommand::from(ctlcmd) {
                                 Call { msg, .. } if msg.is_err() => {
-                                    Box::new(format!("{}", msg.unwrap_err()))
+                                    format!("{}", msg.unwrap_err())
                                 }
                                 Call {
                                     actor,
@@ -345,9 +345,9 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                     let res =
                                         host.call_actor(&actor, &operation, &msg.unwrap()).await;
                                     match res {
-                                        Ok(bytes) => Box::new(call_output(None, bytes, &output_kind)),
+                                        Ok(bytes) => call_output(None, bytes, &output_kind),
                                         Err(e) => {
-                                            Box::new(call_output(Some(e.to_string()), vec![], &output_kind))
+                                            call_output(Some(e.to_string()), vec![], &output_kind)
                                         }
                                     }
                                 }
@@ -356,10 +356,10 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         id: host.id(),
                                         uptime_seconds: host_started.elapsed().as_secs(),
                                     };
-                                    Box::new(crate::ctl::get_hosts_output(
+                                    crate::ctl::get_hosts_output(
                                         vec![standalone_host],
-                                        output_kind,
-                                    ))
+                                        &output_kind,
+                                    )
                                 }
                                 GetInventory { output_kind } => {
                                     let mut actors: Vec<ActorDescription> = vec![];
@@ -397,19 +397,19 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                     }
 
                                     let labels = host.labels().await;
-                                    Box::new(crate::ctl::get_host_inventory_output(
+                                    crate::ctl::get_host_inventory_output(
                                         HostInventory {
                                             actors,
                                             providers,
                                             labels,
                                             host_id: host.id(),
                                         },
-                                        output_kind,
-                                    ))
+                                        &output_kind,
+                                    )
                                 }
                                 GetClaims { output_kind } => {
                                     let wascap_claims =
-                                        host.actor_claims().await.unwrap_or_else(|_| Vec::new());
+                                        host.actor_claims().await.unwrap_or_else(|_| vec![]);
                                     let claims = wascap_claims
                                         .iter()
                                         .map(|wc| {
@@ -431,13 +431,13 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                             Claims { values }
                                         })
                                         .collect::<Vec<Claims>>();
-                                    Box::new(crate::ctl::get_claims_output(
+                                    crate::ctl::get_claims_output(
                                         ClaimsList { claims },
-                                        output_kind,
-                                    ))
+                                        &output_kind,
+                                    )
                                 }
                                 Link { values, .. } if values.is_err() => {
-                                    Box::new(format!("{}", values.unwrap_err()))
+                                    format!("{}", values.unwrap_err())
                                 }
                                 Link {
                                     actor_id,
@@ -457,7 +457,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         )
                                         .await
                                         .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                    Box::new(link_output(&actor_id, &provider_id, failure, &output_kind))
+                                    link_output(&actor_id, &provider_id, failure, &output_kind)
                                 }
                                 StartActor {
                                     actor_ref,
@@ -477,12 +477,12 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         },
                                     }
                                     .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                    Box::new(start_actor_output(
+                                    start_actor_output(
                                         &actor_ref,
                                         &host.id(),
                                         failure,
                                         &output_kind,
-                                    ))
+                                    )
                                 }
                                 StartProvider {
                                     provider_ref,
@@ -496,12 +496,12 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         )
                                         .await
                                         .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                    Box::new(start_provider_output(
+                                    start_provider_output(
                                         &provider_ref,
                                         &host.id(),
                                         failure,
                                         &output_kind,
-                                    ))
+                                    )
                                 }
                                 StopActor {
                                     actor_ref,
@@ -511,7 +511,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         .stop_actor(&actor_ref)
                                         .await
                                         .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                    Box::new(stop_actor_output(&actor_ref, failure, &output_kind))
+                                    stop_actor_output(&actor_ref, failure, &output_kind)
                                 }
                                 StopProvider {
                                     provider_ref,
@@ -523,7 +523,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                         .stop_provider(&provider_ref, &contract_id, Some(link_name))
                                         .await
                                         .map_or_else(|e| Some(format!("{}", e)), |_| None);
-                                    Box::new(stop_provider_output(&provider_ref, failure, &output_kind))
+                                    stop_provider_output(&provider_ref, failure, &output_kind)
                                 }
                                 UpdateActor {
                                     actor_id,
@@ -550,18 +550,18 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
                                             false,
                                         )
                                         .await
-                                        .unwrap_or_else(|_| Vec::new()))
+                                        .unwrap_or_else(|_| vec![]))
                                     };
 
                                     let ack = host
                                         .update_actor(&actor_id, oci_ref.clone(), &actor_bytes)
                                         .await;
-                                    Box::new(update_actor_output(
+                                    update_actor_output(
                                         &actor_id,
                                         &new_actor_ref.to_string(),
                                         ack.map_or_else(|e| Some(format!("{}", e)), |_| None),
                                         &output_kind,
-                                    ))
+                                    )
                                 }
                             };
                             host_output_sender.send(output).unwrap();
@@ -595,7 +595,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
     loop {
         // If any output is sent by a non-lattice connected host, log to output
         if let Ok(output) = host_output_receiver.try_recv() {
-            log_to_output(Arc::clone(&repl.output_state), output.as_ref());
+            log_to_output(Arc::clone(&repl.output_state), output);
         }
         if let Ok(evt) = tui_receiver.recv_timeout(std::time::Duration::from_millis(50)) {
             let res = match evt? {
@@ -654,7 +654,7 @@ async fn handle_up(cmd: UpCliCommand) -> Result<()> {
 
 fn handle_drain(drain_cmd: DrainCliCommand, output_state: Arc<Mutex<OutputState>>) -> Result<()> {
     let output = crate::drain::handle_command(drain_cmd)?;
-    log_to_output(output_state, &output);
+    log_to_output(output_state, output);
     Ok(())
 }
 
@@ -663,13 +663,13 @@ async fn handle_claims(
     output_state: Arc<Mutex<OutputState>>,
 ) -> Result<()> {
     let output = crate::claims::handle_command(claims_cmd).await?;
-    log_to_output(output_state, output.as_ref());
+    log_to_output(output_state, output);
     Ok(())
 }
 
 async fn handle_ctl(ctl_cmd: CtlCliCommand, output_state: Arc<Mutex<OutputState>>) -> Result<()> {
     let output = crate::ctl::handle_command(ctl_cmd).await?;
-    log_to_output(output_state, output.as_ref());
+    log_to_output(output_state, output);
     Ok(())
 }
 
@@ -678,19 +678,19 @@ async fn handle_keys(
     output_state: Arc<Mutex<OutputState>>,
 ) -> Result<()> {
     let output = crate::keys::handle_command(keys_cmd)?;
-    log_to_output(output_state, &output);
+    log_to_output(output_state, output);
     Ok(())
 }
 
 async fn handle_par(par_cmd: ParCliCommand, output_state: Arc<Mutex<OutputState>>) -> Result<()> {
     let output = crate::par::handle_command(par_cmd).await?;
-    log_to_output(output_state, output.as_ref());
+    log_to_output(output_state, output);
     Ok(())
 }
 
 async fn handle_reg(reg_cmd: RegCliCommand, output_state: Arc<Mutex<OutputState>>) -> Result<()> {
     let output = crate::reg::handle_command(reg_cmd).await?;
-    log_to_output(output_state, &output);
+    log_to_output(output_state, output);
     Ok(())
 }
 
@@ -701,12 +701,15 @@ pub(crate) fn cleanup_terminal(terminal: &mut Terminal<ReplTermionBackend>) {
 }
 
 /// Append a message to the output log
-pub(crate) fn log_to_output(state: Arc<Mutex<OutputState>>, out: &dyn OutputWidthFormat) {
+pub(crate) fn log_to_output(state: Arc<Mutex<OutputState>>, out: String) {
+    // Reset output scroll to bottom
     let mut state = state.lock().unwrap();
+    state.output_cursor = state.output.len();
+
     let output_width = state.output_width - 2;
 
     // Newlines are used here for accurate scrolling in the Output pane
-    out.format(output_width).lines().for_each(|line| {
+    out.split('\n').for_each(|line| {
         let line_len = line.chars().count();
         if line_len > output_width {
             let mut offset = 0;
@@ -717,14 +720,14 @@ pub(crate) fn log_to_output(state: Arc<Mutex<OutputState>>, out: &dyn OutputWidt
                 state.output.push(sub_line);
                 offset += output_width
             }
+            state.output_cursor += n_lines;
         } else {
             state.output.push(line.to_string());
+            state.output_cursor += 1;
         }
     });
     state.output.push("".to_string());
-
-    // Reset output scroll to bottom
-    state.output_cursor = state.output.len();
+    state.output_cursor += 1;
 }
 
 /// Helper function to delimit an input vec by newlines for proper REPL display

@@ -1,7 +1,7 @@
 extern crate wasmcloud_control_interface;
 use crate::util::{
     convert_error, json_str_to_msgpack_bytes, labels_vec_to_hashmap, output_destination, Output,
-    OutputDestination, OutputKind, OutputWidthFormat, Result, WASH_CMD_INFO,
+    OutputDestination, OutputKind, Result, WASH_CMD_INFO,
 };
 use log::debug;
 use spinners::{Spinner, Spinners};
@@ -378,10 +378,10 @@ impl UpdateActorCommand {
     }
 }
 
-pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn OutputWidthFormat>> {
+pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
     use CtlCliCommand::*;
     let mut sp: Option<Spinner> = None;
-    let out: Box<dyn OutputWidthFormat> = match command {
+    let out = match command {
         Call(cmd) => {
             let output = cmd.output;
             sp =
@@ -389,13 +389,13 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
             debug!(target: WASH_CMD_INFO, "Calling actor {}", cmd.actor_id);
             let ir = call_actor(cmd).await?;
             debug!(target: WASH_CMD_INFO, "Invocation response {:?}", ir);
-            Box::new(call_output(ir.error, ir.msg, &output.kind))
+            call_output(ir.error, ir.msg, &output.kind)
         }
         Get(GetCommand::Hosts(cmd)) => {
             let output = cmd.output;
             sp = update_spinner_message(sp, " Retrieving Hosts ...".to_string(), &output);
             let hosts = get_hosts(cmd).await?;
-            Box::new(get_hosts_output(hosts, output.kind))
+            get_hosts_output(hosts, &output.kind)
         }
         Get(GetCommand::HostInventory(cmd)) => {
             let output = cmd.output;
@@ -405,13 +405,13 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
                 &output,
             );
             let inv = get_host_inventory(cmd).await?;
-            Box::new(get_host_inventory_output(inv, output.kind))
+            get_host_inventory_output(inv, &output.kind)
         }
         Get(GetCommand::Claims(cmd)) => {
             let output = cmd.output;
             sp = update_spinner_message(sp, " Retrieving claims ... ".to_string(), &output);
             let claims = get_claims(cmd).await?;
-            Box::new(get_claims_output(claims, output.kind))
+            get_claims_output(claims, &output.kind)
         }
         Link(cmd) => {
             sp = update_spinner_message(
@@ -425,12 +425,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
             let failure = advertise_link(cmd.clone())
                 .await
                 .map_or_else(|e| Some(format!("{}", e)), |_| None);
-            Box::new(link_output(
-                &cmd.actor_id,
-                &cmd.provider_id,
-                failure,
-                &cmd.output.kind,
-            ))
+            link_output(&cmd.actor_id, &cmd.provider_id, failure, &cmd.output.kind)
         }
         Start(StartCommand::Actor(cmd)) => {
             let output = cmd.output;
@@ -440,12 +435,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
                 &output,
             );
             let ack = start_actor(cmd).await?;
-            Box::new(start_actor_output(
-                &ack.actor_ref,
-                &ack.host_id,
-                ack.failure,
-                &output.kind,
-            ))
+            start_actor_output(&ack.actor_ref, &ack.host_id, ack.failure, &output.kind)
         }
         Start(StartCommand::Provider(cmd)) => {
             let output = cmd.output;
@@ -455,12 +445,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
                 &output,
             );
             let ack = start_provider(cmd).await?;
-            Box::new(start_provider_output(
-                &ack.provider_ref,
-                &ack.host_id,
-                ack.failure,
-                &output.kind,
-            ))
+            start_provider_output(&ack.provider_ref, &ack.host_id, ack.failure, &output.kind)
         }
         Stop(StopCommand::Actor(cmd)) => {
             let output = cmd.output;
@@ -471,11 +456,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
             );
             let ack = stop_actor(cmd.clone()).await?;
             debug!(target: WASH_CMD_INFO, "Stop actor ack: {:?}", ack);
-            Box::new(stop_actor_output(
-                &cmd.actor_id,
-                ack.failure,
-                &cmd.output.kind,
-            ))
+            stop_actor_output(&cmd.actor_id, ack.failure, &cmd.output.kind)
         }
         Stop(StopCommand::Provider(cmd)) => {
             let output = cmd.output;
@@ -486,11 +467,7 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
             );
             let ack = stop_provider(cmd.clone()).await?;
             debug!(target: WASH_CMD_INFO, "Stop provider ack: {:?}", ack);
-            Box::new(stop_provider_output(
-                &cmd.provider_id,
-                ack.failure,
-                &cmd.output.kind,
-            ))
+            stop_provider_output(&cmd.provider_id, ack.failure, &cmd.output.kind)
         }
         Update(UpdateCommand::Actor(cmd)) => {
             let output = cmd.output;
@@ -507,12 +484,12 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<Box<dyn Out
                 cmd.actor_id, cmd.new_actor_ref
             );
             let ack = update_actor(cmd.clone()).await;
-            Box::new(update_actor_output(
+            update_actor_output(
                 &cmd.actor_id,
                 &cmd.new_actor_ref,
                 ack.map_or_else(|e| Some(format!("{}", e)), |_| None),
                 &cmd.output.kind,
-            ))
+            )
         }
     };
 

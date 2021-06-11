@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use crate::keys::extract_keypair;
-use crate::util::{format_output, Output, OutputKind, OutputWidthFormat};
+use crate::util::{format_output, Output, OutputKind};
 use nkeys::{KeyPair, KeyPairType};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -333,7 +332,7 @@ pub(crate) struct ActorMetadata {
 
 pub(crate) async fn handle_command(
     command: ClaimsCliCommand,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+) -> Result<String, Box<dyn ::std::error::Error>> {
     match command {
         ClaimsCliCommand::Inspect(inspectcmd) => render_caps(inspectcmd).await,
         ClaimsCliCommand::Sign(signcmd) => sign_file(signcmd),
@@ -341,9 +340,7 @@ pub(crate) async fn handle_command(
     }
 }
 
-fn generate_token(
-    cmd: TokenCommand,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+fn generate_token(cmd: TokenCommand) -> Result<String, Box<dyn ::std::error::Error>> {
     match cmd {
         TokenCommand::Actor(actor) => generate_actor(actor),
         TokenCommand::Operator(operator) => generate_operator(operator),
@@ -372,9 +369,7 @@ fn get_keypair_vec(
         .collect()
 }
 
-fn generate_actor(
-    actor: ActorMetadata,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+fn generate_actor(actor: ActorMetadata) -> Result<String, Box<dyn ::std::error::Error>> {
     let issuer = extract_keypair(
         actor.issuer.clone(),
         Some(actor.name.clone()),
@@ -435,18 +430,16 @@ fn generate_actor(
     );
 
     let jwt = claims.encode(&issuer)?;
-    let out = Box::new(format_output(
+    let out = format_output(
         jwt.clone(),
         json!({ "token": jwt }),
         &actor.common.output.kind,
-    ));
+    );
 
     Ok(out)
 }
 
-fn generate_operator(
-    operator: OperatorMetadata,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+fn generate_operator(operator: OperatorMetadata) -> Result<String, Box<dyn ::std::error::Error>> {
     let self_sign_key = extract_keypair(
         operator.issuer.clone(),
         Some(operator.name.clone()),
@@ -479,17 +472,15 @@ fn generate_operator(
     );
 
     let jwt = claims.encode(&self_sign_key)?;
-    let out = Box::new(format_output(
+    let out = format_output(
         jwt.clone(),
         json!({ "token": jwt }),
         &operator.common.output.kind,
-    ));
+    );
     Ok(out)
 }
 
-fn generate_account(
-    account: AccountMetadata,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+fn generate_account(account: AccountMetadata) -> Result<String, Box<dyn ::std::error::Error>> {
     let issuer = extract_keypair(
         account.issuer.clone(),
         Some(account.name.clone()),
@@ -527,17 +518,15 @@ fn generate_account(
         },
     );
     let jwt = claims.encode(&issuer)?;
-    let out = Box::new(format_output(
+    let out = format_output(
         jwt.clone(),
         json!({ "token": jwt }),
         &account.common.output.kind,
-    ));
+    );
     Ok(out)
 }
 
-fn generate_provider(
-    provider: ProviderMetadata,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+fn generate_provider(provider: ProviderMetadata) -> Result<String, Box<dyn ::std::error::Error>> {
     let issuer = extract_keypair(
         provider.issuer.clone(),
         Some(provider.name.clone()),
@@ -566,15 +555,15 @@ fn generate_provider(
         days_from_now_to_jwt_time(provider.common.expires_in_days),
     );
     let jwt = claims.encode(&issuer)?;
-    let out = Box::new(format_output(
+    let out = format_output(
         jwt.clone(),
         json!({ "token": jwt }),
         &provider.common.output.kind,
-    ));
+    );
     Ok(out)
 }
 
-fn sign_file(cmd: SignCommand) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+fn sign_file(cmd: SignCommand) -> Result<String, Box<dyn ::std::error::Error>> {
     let mut sfile = File::open(&cmd.source).unwrap();
     let mut buf = Vec::new();
     sfile.read_to_end(&mut buf).unwrap();
@@ -666,7 +655,7 @@ fn sign_file(cmd: SignCommand) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::s
 
     let mut outfile = File::create(&destination).unwrap();
     let output = match outfile.write(&signed) {
-        Ok(_) => Ok(Box::new(format_output(
+        Ok(_) => Ok(format_output(
             format!(
                 "Successfully signed {} with capabilities: {}",
                 destination,
@@ -674,7 +663,7 @@ fn sign_file(cmd: SignCommand) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::s
             ),
             json!({"result": "success", "destination": destination, "capabilities": caps_list}),
             &cmd.metadata.common.output.kind,
-        ))),
+        )),
         Err(e) => Err(Box::new(e)),
     }?;
 
@@ -711,21 +700,19 @@ async fn get_caps(
     }
 }
 
-async fn render_caps(
-    cmd: InspectCommand,
-) -> Result<Box<dyn OutputWidthFormat>, Box<dyn ::std::error::Error>> {
+async fn render_caps(cmd: InspectCommand) -> Result<String, Box<dyn ::std::error::Error>> {
     let caps = get_caps(&cmd).await?;
 
-    let out: Box<dyn OutputWidthFormat> = match caps {
+    let out = match caps {
         Some(token) => {
             if cmd.jwt_only {
-                Box::new(token.jwt)
+                token.jwt
             } else {
                 let validation = wascap::jwt::validate_token::<Actor>(&token.jwt)?;
-                Box::new(render_actor_claims(token.claims, validation, &cmd.output))
+                render_actor_claims(token.claims, validation, &cmd.output, None)
             }
         }
-        None => Box::new(format!("No capabilities discovered in : {}", &cmd.module)),
+        None => format!("No capabilities discovered in : {}", &cmd.module),
     };
     Ok(out)
 }
@@ -735,113 +722,99 @@ pub(crate) fn render_actor_claims(
     claims: Claims<Actor>,
     validation: TokenValidation,
     output: &Output,
-) -> ActorClaimsOutput {
-    ActorClaimsOutput {
-        claims,
-        validation,
-        output_kind: output.kind,
-    }
-}
+    max_width: Option<usize>,
+) -> String {
+    let md = claims.metadata.clone().unwrap();
+    let friendly_rev = md.rev.unwrap_or(0);
+    let friendly_ver = md.ver.unwrap_or_else(|| "None".to_string());
+    let friendly = format!("{} ({})", friendly_ver, friendly_rev);
+    let provider = if md.provider {
+        "Capability Provider"
+    } else {
+        "Capabilities"
+    };
 
-pub(crate) struct ActorClaimsOutput {
-    claims: Claims<Actor>,
-    validation: TokenValidation,
-    output_kind: OutputKind,
-}
-
-impl OutputWidthFormat for ActorClaimsOutput {
-    fn format(&self, output_width: usize) -> Cow<'_, str> {
-        let md = self.claims.metadata.clone().unwrap();
-        let friendly_rev = md.rev.unwrap_or(0);
-        let friendly_ver = md.ver.unwrap_or_else(|| "None".to_string());
-        let friendly = format!("{} ({})", friendly_ver, friendly_rev);
-        let provider = if md.provider {
-            "Capability Provider"
-        } else {
-            "Capabilities"
-        };
-
-        let tags = if let Some(tags) = md.tags {
-            if tags.is_empty() {
-                "None".to_string()
-            } else {
-                tags.join(",")
-            }
-        } else {
+    let tags = if let Some(tags) = &claims.metadata.as_ref().unwrap().tags {
+        if tags.is_empty() {
             "None".to_string()
-        };
-
-        let friendly_caps: Vec<String> = if let Some(caps) = md.caps {
-            caps.iter().map(|c| capability_name(&c)).collect()
         } else {
-            vec![]
-        };
+            tags.join(",")
+        }
+    } else {
+        "None".to_string()
+    };
 
-        let call_alias = md
-            .call_alias
-            .clone()
-            .unwrap_or_else(|| "(Not set)".to_string());
+    let friendly_caps: Vec<String> = if let Some(caps) = &claims.metadata.as_ref().unwrap().caps {
+        caps.iter().map(|c| capability_name(&c)).collect()
+    } else {
+        vec![]
+    };
 
-        match self.output_kind {
-            OutputKind::Json => {
-                let iss_label = token_label(&self.claims.issuer).to_ascii_lowercase();
-                let sub_label = token_label(&self.claims.subject).to_ascii_lowercase();
-                let provider_json = provider.replace(" ", "_").to_ascii_lowercase();
-                format!(
-                    "{}",
-                    json!({
-                        iss_label: self.claims.issuer,
-                        sub_label: self.claims.subject,
-                        "expires": self.validation.expires_human,
-                        "can_be_used": self.validation.not_before_human,
-                        "version": friendly_ver,
-                        "revision": friendly_rev,
-                        provider_json: friendly_caps,
-                        "tags": tags,
-                        "call_alias": call_alias,
-                    })
-                )
-                .into()
-            }
-            OutputKind::Text => {
-                let mut table = render_core(&self.claims, &self.validation, Some(output_width));
+    let call_alias = claims
+        .metadata
+        .as_ref()
+        .unwrap()
+        .call_alias
+        .clone()
+        .unwrap_or_else(|| "(Not set)".to_string());
 
-                table.add_row(Row::new(vec![
-                    TableCell::new("Version"),
-                    TableCell::new_with_alignment(friendly, 1, Alignment::Right),
-                ]));
+    match output.kind {
+        OutputKind::Json => {
+            let iss_label = token_label(&claims.issuer).to_ascii_lowercase();
+            let sub_label = token_label(&claims.subject).to_ascii_lowercase();
+            let provider_json = provider.replace(" ", "_").to_ascii_lowercase();
+            format!(
+                "{}",
+                json!({ iss_label: claims.issuer,
+                sub_label: claims.subject,
+                "expires": validation.expires_human,
+                "can_be_used": validation.not_before_human,
+                "version": friendly_ver,
+                "revision": friendly_rev,
+                provider_json: friendly_caps,
+                "tags": tags,
+                "call_alias": call_alias,
+                })
+            )
+        }
+        OutputKind::Text => {
+            let mut table = render_core(&claims, validation, max_width);
 
-                table.add_row(Row::new(vec![
-                    TableCell::new("Call Alias"),
-                    TableCell::new_with_alignment(call_alias, 1, Alignment::Right),
-                ]));
+            table.add_row(Row::new(vec![
+                TableCell::new("Version"),
+                TableCell::new_with_alignment(friendly, 1, Alignment::Right),
+            ]));
 
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    provider,
-                    2,
-                    Alignment::Center,
-                )]));
+            table.add_row(Row::new(vec![
+                TableCell::new("Call Alias"),
+                TableCell::new_with_alignment(call_alias, 1, Alignment::Right),
+            ]));
 
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    friendly_caps.join("\n"),
-                    2,
-                    Alignment::Left,
-                )]));
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                provider,
+                2,
+                Alignment::Center,
+            )]));
 
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    "Tags",
-                    2,
-                    Alignment::Center,
-                )]));
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                friendly_caps.join("\n"),
+                2,
+                Alignment::Left,
+            )]));
 
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    tags,
-                    2,
-                    Alignment::Left,
-                )]));
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                "Tags",
+                2,
+                Alignment::Center,
+            )]));
 
-                table.render().into()
-            }
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                tags,
+                2,
+                Alignment::Left,
+            )]));
+
+            table.render()
         }
     }
 }
@@ -860,16 +833,18 @@ fn token_label(pk: &str) -> String {
     }
 }
 
-fn render_core<'a, T>(
-    claims: &'a Claims<T>,
-    validation: &'a TokenValidation,
+fn render_core<T>(
+    claims: &Claims<T>,
+    validation: TokenValidation,
     max_width: Option<usize>,
-) -> Table<'a>
+) -> Table
 where
     T: serde::Serialize + DeserializeOwned + WascapEntity,
 {
     let mut table = Table::new();
-    crate::util::configure_table_style(&mut table, 2, max_width.unwrap_or(68));
+    table.max_column_width = max_width.unwrap_or(68);
+    table.style = crate::util::empty_table_style();
+    table.separate_rows = false;
     let headline = format!("{} - {}", claims.name(), token_label(&claims.subject));
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
@@ -889,12 +864,12 @@ where
 
     table.add_row(Row::new(vec![
         TableCell::new("Expires"),
-        TableCell::new_with_alignment(&validation.expires_human, 1, Alignment::Right),
+        TableCell::new_with_alignment(validation.expires_human, 1, Alignment::Right),
     ]));
 
     table.add_row(Row::new(vec![
         TableCell::new("Can Be Used"),
-        TableCell::new_with_alignment(&validation.not_before_human, 1, Alignment::Right),
+        TableCell::new_with_alignment(validation.not_before_human, 1, Alignment::Right),
     ]));
 
     table

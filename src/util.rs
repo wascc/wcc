@@ -1,13 +1,12 @@
 use log::info;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use structopt::StructOpt;
-use term_table::{Table, TableStyle};
+use term_table::TableStyle;
 
 pub(crate) type Result<T> = ::std::result::Result<T, Box<dyn ::std::error::Error>>;
 
@@ -135,29 +134,7 @@ pub(crate) fn output_destination() -> OutputDestination {
     }
 }
 
-pub(crate) trait OutputWidthFormat: Send {
-    fn format(&self, output_width: usize) -> Cow<'_, str>;
-}
-
-impl OutputWidthFormat for &str {
-    fn format(&self, _output_width: usize) -> Cow<'_, str> {
-        (*self).into()
-    }
-}
-
-impl OutputWidthFormat for String {
-    fn format(&self, _output_width: usize) -> Cow<'_, str> {
-        self.into()
-    }
-}
-
-pub(crate) fn configure_table_style(table: &mut Table<'_>, columns: usize, max_table_width: usize) {
-    table.max_column_width = (max_table_width - 1) / columns;
-    table.style = empty_table_style();
-    table.separate_rows = false;
-}
-
-fn empty_table_style() -> TableStyle {
+pub(crate) fn empty_table_style() -> TableStyle {
     TableStyle {
         top_left_corner: ' ',
         top_right_corner: ' ',

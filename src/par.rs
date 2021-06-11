@@ -1,16 +1,14 @@
 extern crate provider_archive;
 use crate::keys::extract_keypair;
-use crate::util::{convert_error, format_output, Output, OutputKind, OutputWidthFormat, Result};
+use crate::util::{convert_error, format_output, Output, OutputKind, Result};
 use nkeys::KeyPairType;
 use provider_archive::*;
 use serde_json::json;
-use std::borrow::Cow;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::PathBuf;
 use structopt::clap::AppSettings;
 use structopt::StructOpt;
-use wascap::jwt::{CapabilityProvider, Claims};
 
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
 
@@ -204,7 +202,7 @@ pub(crate) struct InsertCommand {
     pub(crate) output: Output,
 }
 
-pub(crate) async fn handle_command(command: ParCliCommand) -> Result<Box<dyn OutputWidthFormat>> {
+pub(crate) async fn handle_command(command: ParCliCommand) -> Result<String> {
     match command {
         ParCliCommand::Create(cmd) => handle_create(cmd),
         ParCliCommand::Inspect(cmd) => handle_inspect(cmd).await,
@@ -213,7 +211,7 @@ pub(crate) async fn handle_command(command: ParCliCommand) -> Result<Box<dyn Out
 }
 
 /// Creates a provider archive using an initial architecture target, provider, and signing keys
-pub(crate) fn handle_create(cmd: CreateCommand) -> Result<Box<dyn OutputWidthFormat>> {
+pub(crate) fn handle_create(cmd: CreateCommand) -> Result<String> {
     let mut par = ProviderArchive::new(
         &cmd.capid,
         &cmd.name,
@@ -263,22 +261,22 @@ pub(crate) fn handle_create(cmd: CreateCommand) -> Result<Box<dyn OutputWidthFor
             .write(&outfile, &issuer, &subject, cmd.compress)
             .is_err()
         {
-            Box::new(format!(
+            format!(
                 "Error writing PAR. Please ensure directory {:?} exists",
                 PathBuf::from(outfile).parent().unwrap(),
-            ))
+            )
         } else {
-            Box::new(format_output(
+            format_output(
                 format!("Successfully created archive {}", outfile),
                 json!({"result": "success", "file": outfile}),
                 &cmd.output.kind,
-            ))
+            )
         },
     )
 }
 
 /// Loads a provider archive and outputs the contents of the claims
-pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<Box<dyn OutputWidthFormat>> {
+pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<String> {
     let archive = match File::open(&cmd.archive) {
         Ok(mut f) => {
             let mut buf = Vec::new();
@@ -299,16 +297,96 @@ pub(crate) async fn handle_inspect(cmd: InspectCommand) -> Result<Box<dyn Output
         }
     };
     let claims = archive.claims().unwrap();
+    let metadata = claims.metadata.unwrap();
 
-    Ok(Box::new(InspectOutput {
-        claims,
-        targets: archive.targets(),
-        output_kind: cmd.output.kind,
-    }))
+    let output = match cmd.output.kind {
+        OutputKind::Json => {
+            let friendly_rev = if metadata.rev.is_some() {
+                format!("{}", metadata.rev.unwrap())
+            } else {
+                "None".to_string()
+            };
+            let friendly_ver = metadata.ver.unwrap_or_else(|| "None".to_string());
+            format!(
+                "{}",
+                json!({"name": metadata.name.unwrap(),
+                    "issuer": claims.issuer,
+                    "service": claims.subject,
+                    "capability_contract_id": metadata.capid,
+                    "vendor": metadata.vendor,
+                    "ver": friendly_ver,
+                    "rev": friendly_rev,
+                    "targets": archive.targets()})
+            )
+        }
+        OutputKind::Text => {
+            use term_table::row::Row;
+            use term_table::table_cell::*;
+            use term_table::Table;
+
+            let mut table = Table::new();
+            table.max_column_width = 68;
+            table.style = crate::util::empty_table_style();
+            table.separate_rows = false;
+
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                format!("{} - Provider Archive", metadata.name.unwrap()),
+                2,
+                Alignment::Center,
+            )]));
+
+            table.add_row(Row::new(vec![
+                TableCell::new("Account"),
+                TableCell::new_with_alignment(claims.issuer, 1, Alignment::Right),
+            ]));
+            table.add_row(Row::new(vec![
+                TableCell::new("Service"),
+                TableCell::new_with_alignment(claims.subject, 1, Alignment::Right),
+            ]));
+            table.add_row(Row::new(vec![
+                TableCell::new("Capability Contract ID"),
+                TableCell::new_with_alignment(metadata.capid, 1, Alignment::Right),
+            ]));
+            table.add_row(Row::new(vec![
+                TableCell::new("Vendor"),
+                TableCell::new_with_alignment(metadata.vendor, 1, Alignment::Right),
+            ]));
+
+            if let Some(ver) = metadata.ver {
+                table.add_row(Row::new(vec![
+                    TableCell::new("Version"),
+                    TableCell::new_with_alignment(ver, 1, Alignment::Right),
+                ]));
+            }
+
+            if let Some(rev) = metadata.rev {
+                table.add_row(Row::new(vec![
+                    TableCell::new("Revision"),
+                    TableCell::new_with_alignment(rev, 1, Alignment::Right),
+                ]));
+            }
+
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                "Supported Architecture Targets",
+                2,
+                Alignment::Center,
+            )]));
+
+            table.add_row(Row::new(vec![TableCell::new_with_alignment(
+                archive.targets().join("\n"),
+                2,
+                Alignment::Left,
+            )]));
+
+            table.render()
+        }
+    };
+
+    Ok(output)
 }
 
 /// Loads a provider archive and attempts to insert an additional provider into it
-pub(crate) fn handle_insert(cmd: InsertCommand) -> Result<Box<dyn OutputWidthFormat>> {
+pub(crate) fn handle_insert(cmd: InsertCommand) -> Result<String> {
     let mut buf = Vec::new();
     let mut f = File::open(cmd.archive.clone())?;
     f.read_to_end(&mut buf)?;
@@ -339,109 +417,14 @@ pub(crate) fn handle_insert(cmd: InsertCommand) -> Result<Box<dyn OutputWidthFor
     par.write(&cmd.archive, &issuer, &subject, is_compressed(&buf)?)
         .map_err(convert_error)?;
 
-    Ok(Box::new(format_output(
+    Ok(format_output(
         format!(
             "Successfully inserted {} into archive {}",
             cmd.binary, cmd.archive
         ),
         json!({"result": "success", "file": cmd.archive}),
         &cmd.output.kind,
-    )))
-}
-
-pub(crate) struct InspectOutput {
-    claims: Claims<CapabilityProvider>,
-    targets: Vec<String>,
-    output_kind: OutputKind,
-}
-
-impl OutputWidthFormat for InspectOutput {
-    fn format(&self, output_width: usize) -> Cow<'_, str> {
-        let metadata = self.claims.metadata.as_ref().unwrap();
-        match self.output_kind {
-            OutputKind::Json => {
-                let friendly_rev = if metadata.rev.is_some() {
-                    format!("{}", metadata.rev.unwrap())
-                } else {
-                    "None".to_string()
-                };
-                let friendly_ver = metadata.ver.clone().unwrap_or_else(|| "None".to_string());
-                format!(
-                    "{}",
-                    json!({
-                        "name": metadata.name.as_ref().unwrap(),
-                        "issuer": self.claims.issuer,
-                        "service": self.claims.subject,
-                        "capability_contract_id": metadata.capid,
-                        "vendor": metadata.vendor,
-                        "ver": friendly_ver,
-                        "rev": friendly_rev,
-                        "targets": self.targets
-                    })
-                )
-                .into()
-            }
-            OutputKind::Text => {
-                use term_table::row::Row;
-                use term_table::table_cell::*;
-                use term_table::Table;
-
-                let mut table = Table::new();
-                crate::util::configure_table_style(&mut table, 2, output_width);
-
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    format!("{} - Provider Archive", metadata.name.as_ref().unwrap()),
-                    2,
-                    Alignment::Center,
-                )]));
-
-                table.add_row(Row::new(vec![
-                    TableCell::new("Account"),
-                    TableCell::new_with_alignment(&self.claims.issuer, 1, Alignment::Right),
-                ]));
-                table.add_row(Row::new(vec![
-                    TableCell::new("Service"),
-                    TableCell::new_with_alignment(&self.claims.subject, 1, Alignment::Right),
-                ]));
-                table.add_row(Row::new(vec![
-                    TableCell::new("Capability Contract ID"),
-                    TableCell::new_with_alignment(&metadata.capid, 1, Alignment::Right),
-                ]));
-                table.add_row(Row::new(vec![
-                    TableCell::new("Vendor"),
-                    TableCell::new_with_alignment(&metadata.vendor, 1, Alignment::Right),
-                ]));
-
-                if let Some(ref ver) = metadata.ver {
-                    table.add_row(Row::new(vec![
-                        TableCell::new("Version"),
-                        TableCell::new_with_alignment(ver, 1, Alignment::Right),
-                    ]));
-                }
-
-                if let Some(ref rev) = metadata.rev {
-                    table.add_row(Row::new(vec![
-                        TableCell::new("Revision"),
-                        TableCell::new_with_alignment(rev, 1, Alignment::Right),
-                    ]));
-                }
-
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    "Supported Architecture Targets",
-                    2,
-                    Alignment::Center,
-                )]));
-
-                table.add_row(Row::new(vec![TableCell::new_with_alignment(
-                    self.targets.join("\n"),
-                    2,
-                    Alignment::Left,
-                )]));
-
-                table.render().into()
-            }
-        }
-    }
+    ))
 }
 
 /// Inspects the byte slice for a GZIP header, and returns true if the file is compressed
