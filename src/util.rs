@@ -18,6 +18,7 @@ pub(crate) const WASH_LOG_INFO: &str = "WASH_LOG";
 pub(crate) const WASH_CMD_INFO: &str = "WASH_CMD";
 
 thread_local! {
+    /// Currently available output width can change when the user resizes their terminal window.
     static MAX_TEXT_OUTPUT_WIDTH: Cell<usize> = Cell::new(0);
 }
 
