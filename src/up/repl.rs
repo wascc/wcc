@@ -317,7 +317,7 @@ impl WashRepl {
                 let iter = cmd.split_ascii_whitespace();
 
                 crate::util::set_max_text_output_width(
-                    self.output_state.lock().unwrap().output_width,
+                    self.output_state.lock().unwrap().output_width - 2,
                 );
                 let cli = ReplCli::from_iter_safe(iter);
 

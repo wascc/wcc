@@ -156,7 +156,8 @@ pub(crate) fn output_destination() -> OutputDestination {
 
 pub(crate) fn configure_table_style(table: &mut Table<'_>, columns: usize, max_table_width: usize) {
     table.max_column_width = if max_table_width > 0 && columns > 0 {
-        (max_table_width - columns) / columns
+        let borders = 1 + columns;
+        (max_table_width - borders) / columns
     } else {
         usize::MAX
     };
@@ -177,5 +178,50 @@ fn empty_table_style() -> TableStyle {
         intersection: ' ',
         vertical: ' ',
         horizontal: ' ',
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::configure_table_style;
+    use term_table::{row::Row, table_cell::TableCell, Table};
+
+    #[test]
+    fn max_table_width_one_column() {
+        let mut table = Table::new();
+        configure_table_style(&mut table, 1, 10);
+        table.add_row(Row::new(vec![TableCell::new("x".repeat(10))]));
+        let result = table.render();
+        let max_line_width = result.lines().map(|line| line.len()).max().unwrap();
+
+        assert_eq!(10, max_line_width);
+    }
+
+    #[test]
+    fn max_table_width_two_columns() {
+        let mut table = Table::new();
+        configure_table_style(&mut table, 2, 10);
+        table.add_row(Row::new(vec![
+            TableCell::new("x".repeat(5)),
+            TableCell::new("y".repeat(5)),
+        ]));
+        let result = table.render();
+        let max_line_width = result.lines().map(|line| line.len()).max().unwrap();
+
+        assert_eq!(9, max_line_width);
+    }
+
+    #[test]
+    fn max_table_width_two_columns_spanned() {
+        let mut table = Table::new();
+        configure_table_style(&mut table, 2, 10);
+        table.add_row(Row::new(vec![TableCell::new_with_col_span(
+            "x".repeat(10),
+            2,
+        )]));
+        let result = table.render();
+        let max_line_width = result.lines().map(|line| line.len()).max().unwrap();
+
+        assert_eq!(9, max_line_width);
     }
 }
