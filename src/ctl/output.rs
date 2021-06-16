@@ -199,6 +199,7 @@ pub(crate) fn host_inventory_table(inv: HostInventory, max_width: usize) -> Stri
     let mut table = Table::new();
     crate::util::configure_table_style(&mut table, 4, max_width);
 
+    // TableCells have 1 char padding left and right. See [TableCell::pad_content].
     let content_padding_width = 2;
     let max_id_width = crate::util::get_max_column_width(&table, 0) - content_padding_width;
 
