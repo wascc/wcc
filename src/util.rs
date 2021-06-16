@@ -66,7 +66,9 @@ impl FromStr for OutputKind {
             "text" => Ok(OutputKind::Text {
                 max_width: get_max_text_output_width(),
             }),
-            "wide" => Ok(OutputKind::Text { max_width: 0 }),
+            "wide" => Ok(OutputKind::Text {
+                max_width: usize::MAX,
+            }),
             _ => Err(OutputParseErr),
         }
     }
