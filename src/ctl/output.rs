@@ -198,7 +198,9 @@ pub(crate) fn hosts_table(hosts: Vec<Host>, max_width: usize) -> String {
 pub(crate) fn host_inventory_table(inv: HostInventory, max_width: usize) -> String {
     let mut table = Table::new();
     crate::util::configure_table_style(&mut table, 4, max_width);
-    let max_id_width = crate::util::get_max_column_width(&table, 0, true);
+
+    let content_padding_width = 2;
+    let max_id_width = crate::util::get_max_column_width(&table, 0) - content_padding_width;
 
     table.add_row(Row::new(vec![TableCell::new_with_alignment(
         format!("Host Inventory ({})", inv.host_id),

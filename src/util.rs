@@ -184,13 +184,11 @@ pub(crate) fn configure_table_style(table: &mut Table<'_>, columns: usize, max_t
     table.separate_rows = false;
 }
 
-pub(crate) fn get_max_column_width(table: &Table<'_>, column_index: usize, padding: bool) -> usize {
-    let padding_width = if padding { 2 } else { 0 };
+pub(crate) fn get_max_column_width(table: &Table<'_>, column_index: usize) -> usize {
     *table
         .max_column_widths
         .get(&column_index)
         .unwrap_or(&table.max_column_width)
-        - padding_width
 }
 
 fn empty_table_style() -> TableStyle {
