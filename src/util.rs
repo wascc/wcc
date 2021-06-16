@@ -209,8 +209,18 @@ fn empty_table_style() -> TableStyle {
 
 #[cfg(test)]
 mod test {
-    use super::configure_table_style;
+    use super::{configure_table_style, format_ellipsis};
     use term_table::{row::Row, table_cell::TableCell, Table};
+
+    #[test]
+    fn format_ellipsis_truncates_to_max_width() {
+        assert_eq!("hello w...", &format_ellipsis("hello world".into(), 10));
+    }
+
+    #[test]
+    fn format_ellipsis_no_ellipsis_necessary() {
+        assert_eq!("hello world", &format_ellipsis("hello world".into(), 11));
+    }
 
     #[test]
     fn max_table_width_one_column() {
