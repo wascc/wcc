@@ -43,6 +43,10 @@ pub(crate) struct ConnectionOpts {
     )]
     rpc_port: String,
 
+    /// Credsfile for RPC authentication
+    #[structopt(long = "rpc-credsfile", env = "WASH_RPC_CREDS", hide_env_values = true)]
+    rpc_credsfile: Option<String>,
+
     /// Namespace prefix for wasmcloud command interface
     #[structopt(short = "n", long = "ns-prefix", default_value = "default")]
     ns_prefix: String,
@@ -62,6 +66,7 @@ impl Default for ConnectionOpts {
         ConnectionOpts {
             rpc_host: "0.0.0.0".to_string(),
             rpc_port: "4222".to_string(),
+            rpc_credsfile: None,
             ns_prefix: "default".to_string(),
             rpc_timeout: 1,
         }
@@ -503,10 +508,18 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
 pub(crate) async fn new_ctl_client(
     host: &str,
     port: &str,
+    credsfile: Option<String>,
     ns_prefix: String,
     timeout: Duration,
 ) -> Result<Client> {
-    let nc = nats::asynk::connect(&format!("{}:{}", host, port)).await?;
+    let nats_url = format!("{}:{}", host, port);
+    let nc = if let Some(credsfile_path) = credsfile {
+        nats::Options::with_credentials(credsfile_path)
+            .connect_async(&nats_url)
+            .await?
+    } else {
+        nats::asynk::connect(&nats_url).await?
+    };
     Ok(Client::new(nc, Some(ns_prefix), timeout))
 }
 
@@ -514,6 +527,7 @@ async fn client_from_opts(opts: ConnectionOpts) -> Result<Client> {
     new_ctl_client(
         &opts.rpc_host,
         &opts.rpc_port,
+        opts.rpc_credsfile,
         opts.ns_prefix,
         Duration::from_secs(opts.rpc_timeout),
     )
