@@ -51,7 +51,8 @@ pub(crate) struct ConnectionOpts {
     #[structopt(long = "rpc-seed", env = "WASH_RPC_SEED", hide_env_values = true)]
     rpc_seed: Option<String>,
 
-    /// Credsfile for RPC authentication
+    /// Credsfile for RPC authentication. Combines rpc_seed and rpc_jwt.
+    /// See https://docs.nats.io/developing-with-nats/security/creds for details.
     #[structopt(long = "rpc-credsfile", env = "WASH_RPC_CREDS", hide_env_values = true)]
     rpc_credsfile: Option<String>,
 
