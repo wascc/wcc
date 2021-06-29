@@ -1,11 +1,11 @@
 extern crate wasmcloud_control_interface;
 use crate::util::{
-    convert_error, json_str_to_msgpack_bytes, labels_vec_to_hashmap, output_destination, Output,
-    OutputDestination, OutputKind, Result, WASH_CMD_INFO,
+    convert_error, extract_arg_value, json_str_to_msgpack_bytes, labels_vec_to_hashmap,
+    output_destination, Output, OutputDestination, OutputKind, Result, WASH_CMD_INFO,
 };
 use log::debug;
 use spinners::{Spinner, Spinners};
-use std::{fs::File, io::Read, time::Duration};
+use std::time::Duration;
 use structopt::StructOpt;
 use wasmcloud_control_interface::*;
 mod output;
@@ -516,18 +516,6 @@ pub(crate) async fn handle_command(command: CtlCliCommand) -> Result<String> {
     Ok(out)
 }
 
-/// Returns value from an argument that may be a file path or the value itself
-fn extract_arg_value(arg: &str) -> Result<String> {
-    match File::open(arg) {
-        Ok(mut f) => {
-            let mut value = String::new();
-            f.read_to_string(&mut value)?;
-            Ok(value)
-        }
-        Err(_) => Ok(arg.to_string()),
-    }
-}
-
 pub(crate) async fn new_ctl_client(
     host: &str,
     port: &str,
@@ -540,9 +528,10 @@ pub(crate) async fn new_ctl_client(
     let nats_url = format!("{}:{}", host, port);
     let nc = if let (Some(jwt_file), Some(seed_val)) = (jwt, seed) {
         let kp = nkeys::KeyPair::from_seed(&extract_arg_value(&seed_val)?)?;
+        let jwt_contents = extract_arg_value(&jwt_file)?;
         // You must provide the JWT via a closure
         nats::Options::with_jwt(
-            move || Ok(jwt_file.clone()),
+            move || Ok(jwt_contents.clone()),
             move |nonce| kp.sign(nonce).unwrap(),
         )
         .connect_async(&nats_url)
