@@ -136,7 +136,7 @@ pub(crate) fn extract_arg_value(arg: &str) -> Result<String> {
             f.read_to_string(&mut value)?;
             Ok(value)
         }
-        Err(_) => Ok(dbg!(arg).trim_end_matches(char::is_whitespace).to_string()),
+        Err(_) => Ok(arg.to_string()),
     }
 }
 
