@@ -1,6 +1,6 @@
 [package]
 name = "wash-cli"
-version = "0.4.5"
+version = "0.5.0"
 authors = ["wasmCloud Team"]
 edition = "2018"
 repository = "https://github.com/wasmcloud/wash"
@@ -11,7 +11,7 @@ keywords = ["webassembly", "wasmcloud", "wash", "cli"]
 categories = ["wasm", "command-line-utilities"]
 
 [features]
-default = ["wasm3"]
+default = ["wasm3", "termion"]
 wasmtime = ["wasmcloud-host/wasmtime"]
 wasm3 = ["wasmcloud-host/wasm3"]
 
@@ -26,7 +26,7 @@ serdeconv = "0.4.0"
 tui-logger = "0.6.3"
 tui = { version = "0.14.0", default-features = true }
 log = "0.4.14"
-termion = "1.5"
+termion = { version = "1.5", optional = true } 
 actix-rt = "2.2.0"
 spinners = "1.2.0"
 nats = "0.8.6"

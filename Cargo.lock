@@ -3962,7 +3962,7 @@ dependencies = [
 
 [[package]]
 name = "wash-cli"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "actix-rt",
  "awc",
