@@ -13,7 +13,9 @@ mod par;
 use par::ParCli;
 mod reg;
 use reg::RegCli;
+#[cfg(feature = "termion")]
 mod up;
+#[cfg(feature = "termion")]
 use up::UpCli;
 mod util;
 
@@ -60,6 +62,7 @@ enum CliCommand {
     Reg(RegCli),
     /// Launch wasmcloud REPL environment
     #[structopt(name = "up")]
+    #[cfg(feature = "termion")]
     Up(UpCli),
 }
 
@@ -74,6 +77,7 @@ async fn main() {
         CliCommand::Ctl(ctlcli) => ctl::handle_command(ctlcli.command()).await,
         CliCommand::Par(parcli) => par::handle_command(parcli.command()).await,
         CliCommand::Reg(regcli) => reg::handle_command(regcli.command()).await,
+        #[cfg(feature = "termion")]
         CliCommand::Up(upcli) => up::handle_command(upcli.command())
             .await
             .map(|_s| "Exiting REPL".to_string()),
